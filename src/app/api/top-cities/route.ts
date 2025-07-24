@@ -11,9 +11,16 @@ interface CityWeather {
   main: {
     temp: number;
     humidity: number;
+    pressure: number;
+    feels_like: number;
   };
   sys: {
     country: string;
+  };
+  visibility: number;
+  wind: {
+    speed: number;
+    deg: number;
   };
 }
 
@@ -21,11 +28,56 @@ interface CityWithAQI extends CityWeather {
   aqi: number | null;
 }
 
+// 国家代码映射
+const COUNTRY_NAMES: { [key: string]: string } = {
+  'CN': '中国',
+  'US': '美国',
+  'GB': '英国',
+  'JP': '日本',
+  'KR': '韩国',
+  'SG': '新加坡',
+  'TH': '泰国',
+  'IN': '印度',
+  'AU': '澳大利亚',
+  'RU': '俄罗斯',
+  'TR': '土耳其',
+  'EG': '埃及',
+  'AE': '阿联酋',
+  'ZA': '南非',
+  'BR': '巴西',
+  'AR': '阿根廷',
+  'CA': '加拿大',
+  'NL': '荷兰',
+  'ES': '西班牙',
+  'IT': '意大利',
+  'GR': '希腊',
+  'FR': '法国',
+  'DE': '德国'
+};
+
+interface WeatherInfo {
+  name: string;
+  localName?: string;
+  country: string;
+  countryName: string;
+  value: number;
+  extra?: {
+    windSpeed?: number;
+    pressure?: number;
+    visibility?: number;
+    feelsLike?: number;
+    temp?: number;
+  };
+}
+
 interface TopCitiesResponse {
-  hottest: Array<{ name: string; country: string; temp: number }>;
-  coldest: Array<{ name: string; country: string; temp: number }>;
-  mostHumid: Array<{ name: string; country: string; humidity: number }>;
-  mostPolluted: Array<{ name: string; country: string; aqi: number }>;
+  hottest: WeatherInfo[];
+  coldest: WeatherInfo[];
+  mostHumid: WeatherInfo[];
+  mostPolluted: WeatherInfo[];
+  windiest: WeatherInfo[];
+  lowestPressure: WeatherInfo[];
+  lowVisibility: WeatherInfo[];
 }
 
 // 全球主要城市ID（可根据需要扩展）
@@ -70,10 +122,27 @@ const CITY_LIST = [
 
 const API_KEY = process.env.OPENWEATHERMAP_API_KEY;
 
-// 简单内存缓存，10分钟更新一次
+// 添加错误重试机制
+async function fetchWithRetry(url: string, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res;
+      if (res.status === 401) throw new Error('Invalid API key');
+      if (i === retries - 1) throw new Error(`Failed after ${retries} retries`);
+    } catch (err: any) {
+      if (err.message === 'Invalid API key') throw err;
+      if (i === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw new Error('Max retries reached');
+}
+
+// 简单内存缓存，5分钟更新一次
 let cache: TopCitiesResponse | null = null;
 let cacheTime = 0;
-const CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
+const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
 
 export async function GET() {
   if (!API_KEY) {
@@ -113,33 +182,100 @@ export async function GET() {
     }
     const data = await res.json();
     const cities: CityWeather[] = data.list;
-    // 最热
-    const hottest = [...cities].sort((a, b) => b.main.temp - a.main.temp).slice(0, 10);
-    // 最冷
-    const coldest = [...cities].sort((a, b) => a.main.temp - b.main.temp).slice(0, 10);
-    // 湿度最高
-    const mostHumid = [...cities].sort((a, b) => b.main.humidity - a.main.humidity).slice(0, 10);
-    // 空气污染（用AQI，OpenWeatherMap只支持经纬度，取这些城市的第一个空气质量数据）
+    
+    // 获取空气质量数据
     const pollutionPromises = cities.map(async (city: CityWeather): Promise<CityWithAQI> => {
       try {
         const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.coord.lat}&lon=${city.coord.lon}&appid=${API_KEY}`;
-        const res = await fetch(url);
-        if (!res.ok) return { ...city, aqi: null };
+        const res = await fetchWithRetry(url);
         const air = await res.json();
         return { ...city, aqi: air.list?.[0]?.main?.aqi ?? null };
       } catch {
         return { ...city, aqi: null };
       }
     });
+    
     const pollutionList = await Promise.all(pollutionPromises);
-    // aqi: 1优 2良 3轻度污染 4中度污染 5重度污染
-    const mostPolluted = pollutionList.filter(c => c.aqi !== null).sort((a, b) => (b.aqi || 0) - (a.aqi || 0)).slice(0, 10);
+    
+    // 转换函数
+    const toWeatherInfo = (
+      city: CityWeather | CityWithAQI,
+      value: number,
+      extraData?: { 
+        windSpeed?: number;
+        pressure?: number;
+        visibility?: number;
+        feelsLike?: number;
+      }
+    ): WeatherInfo => ({
+      name: city.name,
+      country: city.sys.country,
+      countryName: COUNTRY_NAMES[city.sys.country] || city.sys.country,
+      value,
+      extra: extraData
+    });
+
+    // 处理各种排行榜数据
+    const hottest = [...cities]
+      .sort((a, b) => b.main.temp - a.main.temp)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.main.temp, {
+        feelsLike: city.main.feels_like,
+        windSpeed: city.wind.speed
+      }));
+
+    const coldest = [...cities]
+      .sort((a, b) => a.main.temp - b.main.temp)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.main.temp, {
+        feelsLike: city.main.feels_like,
+        windSpeed: city.wind.speed
+      }));
+
+    const mostHumid = [...cities]
+      .sort((a, b) => b.main.humidity - a.main.humidity)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.main.humidity, {
+        temp: city.main.temp
+      }));
+
+    const windiest = [...cities]
+      .sort((a, b) => b.wind.speed - a.wind.speed)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.wind.speed, {
+        temp: city.main.temp
+      }));
+
+    const lowestPressure = [...cities]
+      .sort((a, b) => a.main.pressure - b.main.pressure)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.main.pressure, {
+        temp: city.main.temp
+      }));
+
+    const lowVisibility = [...cities]
+      .sort((a, b) => a.visibility - b.visibility)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.visibility, {
+        temp: city.main.temp
+      }));
+
+    const mostPolluted = pollutionList
+      .filter(c => c.aqi !== null)
+      .sort((a, b) => (b.aqi || 0) - (a.aqi || 0))
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.aqi || 0, {
+        temp: city.main.temp
+      }));
 
     const result: TopCitiesResponse = {
-      hottest: hottest.map(city => ({ name: city.name, country: city.sys.country, temp: city.main.temp })),
-      coldest: coldest.map(city => ({ name: city.name, country: city.sys.country, temp: city.main.temp })),
-      mostHumid: mostHumid.map(city => ({ name: city.name, country: city.sys.country, humidity: city.main.humidity })),
-      mostPolluted: mostPolluted.map(city => ({ name: city.name, country: city.sys.country, aqi: city.aqi || 0 })),
+      hottest,
+      coldest,
+      mostHumid,
+      mostPolluted,
+      windiest,
+      lowestPressure,
+      lowVisibility
     };
     cache = result;
     cacheTime = now;
