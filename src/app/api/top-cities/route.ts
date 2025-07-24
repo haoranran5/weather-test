@@ -88,12 +88,27 @@ export async function GET() {
   }
   
   try {
+    // 先测试API key是否有效 - 使用单个城市测试
+    const testUrl = `https://api.openweathermap.org/data/2.5/weather?id=1816670&appid=${API_KEY}&units=metric`;
+    console.log('Testing API key with single city request...');
+    const testRes = await fetch(testUrl);
+    
+    if (!testRes.ok) {
+      console.error('API key test failed:', testRes.status, testRes.statusText);
+      if (testRes.status === 401) {
+        return NextResponse.json({ error: "API key 无效，请检查 OpenWeatherMap API key 是否正确" }, { status: 401 });
+      }
+      return NextResponse.json({ error: `API 测试失败 (${testRes.status})` }, { status: 500 });
+    }
+    
+    console.log('API key test successful, proceeding with batch request...');
+    
     // 批量获取城市天气
     const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid=${API_KEY}&units=metric&lang=zh_cn`;
-    console.log('Making request to:', groupUrl.replace(API_KEY, 'HIDDEN_KEY'));
+    console.log('Making batch request...');
     const res = await fetch(groupUrl);
     if (!res.ok) {
-      console.error('Weather API error:', res.status, res.statusText, 'URL:', groupUrl.replace(API_KEY, 'HIDDEN_KEY'));
+      console.error('Batch weather API error:', res.status, res.statusText);
       return NextResponse.json({ error: `获取城市天气失败 (${res.status})` }, { status: 500 });
     }
     const data = await res.json();
