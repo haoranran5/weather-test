@@ -6,9 +6,34 @@ function formatTime(ts: number, tz: number) {
   return date.toTimeString().slice(0, 5);
 }
 
+// 在import后添加Weather类型定义
+interface Weather {
+  name: string;
+  sys: {
+    country: string;
+    sunrise: number;
+    sunset: number;
+  };
+  main: {
+    temp: number;
+    feels_like: number;
+    humidity: number;
+    pressure: number;
+  };
+  weather: Array<{
+    main: string;
+    description: string;
+    id: number;
+  }>;
+  wind: {
+    speed: number;
+  };
+  timezone: number;
+}
+
 export default function Page() {
   const [city, setCity] = useState("");
-  const [weather, setWeather] = useState<any>(null);
+  const [weather, setWeather] = useState<Weather | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -23,8 +48,12 @@ export default function Page() {
       if (!res.ok) throw new Error("未找到该城市的天气信息");
       const data = await res.json();
       setWeather(data);
-    } catch (err: any) {
-      setError(err.message || "获取天气信息失败");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || "获取天气信息失败");
+      } else {
+        setError("获取天气信息失败");
+      }
     } finally {
       setLoading(false);
     }
@@ -47,8 +76,12 @@ export default function Page() {
         const data = await res.json();
         setWeather(data);
         setCity("");
-      } catch (err: any) {
-        setError(err.message || "获取天气信息失败");
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message || "获取天气信息失败");
+        } else {
+          setError("获取天气信息失败");
+        }
       } finally {
         setLoading(false);
       }

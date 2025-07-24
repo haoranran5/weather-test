@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     }
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "获取天气信息失败" }, { status: 500 });
   }
 } 
