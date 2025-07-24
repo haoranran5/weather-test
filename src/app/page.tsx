@@ -83,12 +83,12 @@ export default function Page() {
         }
         setWeather(data);
         setCity("");
-      } catch (err: unknown) {
+      } catch {
         setError("获取当前位置天气失败，请检查网络");
       } finally {
         setLoading(false);
       }
-    }, (geoErr) => {
+    }, () => {
       setError("定位失败，请检查浏览器权限设置");
       setLoading(false);
     });

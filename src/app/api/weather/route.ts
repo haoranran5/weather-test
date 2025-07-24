@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     }
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: "获取天气信息失败，请检查网络或稍后重试" }, { status: 500 });
   }
 } 
