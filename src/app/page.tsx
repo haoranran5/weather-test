@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 function formatTime(ts: number, tz: number) {
   const date = new Date((ts + tz) * 1000);
@@ -36,6 +36,29 @@ export default function Page() {
   const [weather, setWeather] = useState<Weather | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // 新增：榜单数据
+  const [topData, setTopData] = useState<any>(null);
+  const [topLoading, setTopLoading] = useState(true);
+  const [topError, setTopError] = useState("");
+
+  useEffect(() => {
+    const fetchTop = async () => {
+      setTopLoading(true);
+      setTopError("");
+      try {
+        const res = await fetch("/api/top-cities");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "榜单获取失败");
+        setTopData(data);
+      } catch (e: any) {
+        setTopError(e.message || "榜单获取失败");
+      } finally {
+        setTopLoading(false);
+      }
+    };
+    fetchTop();
+  }, []);
 
   const fetchWeather = async (cityName?: string) => {
     const query = cityName ?? city;
@@ -109,6 +132,61 @@ export default function Page() {
 
   return (
     <div className="min-h-screen flex flex-col justify-between items-center bg-gradient-to-b from-blue-100 to-blue-200">
+      {/* 顶部榜单区块 */}
+      <div className="w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 px-2">
+        {topLoading ? (
+          <div className="col-span-4 text-center text-blue-500">榜单加载中...</div>
+        ) : topError ? (
+          <div className="col-span-4 text-center text-red-500">{topError}</div>
+        ) : topData && (
+          <>
+            <div className="bg-white/90 rounded-xl shadow p-4">
+              <div className="font-bold text-lg mb-2 text-orange-600">全球最热城市TOP10</div>
+              <ol className="text-sm space-y-1">
+                {topData.hottest.map((c: any, i: number) => (
+                  <li key={c.name + c.country} className="flex justify-between">
+                    <span>{i + 1}. {c.name} ({c.country})</span>
+                    <span className="font-mono">{c.temp}°C</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div className="bg-white/90 rounded-xl shadow p-4">
+              <div className="font-bold text-lg mb-2 text-blue-600">全球最冷城市TOP10</div>
+              <ol className="text-sm space-y-1">
+                {topData.coldest.map((c: any, i: number) => (
+                  <li key={c.name + c.country} className="flex justify-between">
+                    <span>{i + 1}. {c.name} ({c.country})</span>
+                    <span className="font-mono">{c.temp}°C</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div className="bg-white/90 rounded-xl shadow p-4">
+              <div className="font-bold text-lg mb-2 text-green-700">全球湿度最高TOP10</div>
+              <ol className="text-sm space-y-1">
+                {topData.mostHumid.map((c: any, i: number) => (
+                  <li key={c.name + c.country} className="flex justify-between">
+                    <span>{i + 1}. {c.name} ({c.country})</span>
+                    <span className="font-mono">{c.humidity}%</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div className="bg-white/90 rounded-xl shadow p-4">
+              <div className="font-bold text-lg mb-2 text-red-700">全球空气污染最严重TOP10</div>
+              <ol className="text-sm space-y-1">
+                {topData.mostPolluted.map((c: any, i: number) => (
+                  <li key={c.name + c.country} className="flex justify-between">
+                    <span>{i + 1}. {c.name} ({c.country})</span>
+                    <span className="font-mono">AQI {c.aqi}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </>
+        )}
+      </div>
       {/* 顶部标题 */}
       <div className="w-full flex flex-col items-center mt-10">
         <h1 className="text-4xl font-bold text-blue-700 mb-2">OpenWeather 天气</h1>
