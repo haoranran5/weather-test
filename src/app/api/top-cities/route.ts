@@ -77,6 +77,7 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10分钟缓存
 
 export async function GET() {
   if (!API_KEY) {
+    console.error('API_KEY is missing:', API_KEY);
     return NextResponse.json({ error: "API key 配置错误" }, { status: 500 });
   }
   
@@ -89,9 +90,10 @@ export async function GET() {
   try {
     // 批量获取城市天气
     const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid=${API_KEY}&units=metric&lang=zh_cn`;
+    console.log('Making request to:', groupUrl.replace(API_KEY, 'HIDDEN_KEY'));
     const res = await fetch(groupUrl);
     if (!res.ok) {
-      console.error('Weather API error:', res.status, res.statusText);
+      console.error('Weather API error:', res.status, res.statusText, 'URL:', groupUrl.replace(API_KEY, 'HIDDEN_KEY'));
       return NextResponse.json({ error: `获取城市天气失败 (${res.status})` }, { status: 500 });
     }
     const data = await res.json();
