@@ -1,5 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// 定义城市天气数据类型
+interface CityWeather {
+  id: number;
+  name: string;
+  coord: {
+    lat: number;
+    lon: number;
+  };
+  main: {
+    temp: number;
+    humidity: number;
+  };
+  sys: {
+    country: string;
+  };
+}
+
+interface CityWithAQI extends CityWeather {
+  aqi: number | null;
+}
+
+interface TopCitiesResponse {
+  hottest: Array<{ name: string; country: string; temp: number }>;
+  coldest: Array<{ name: string; country: string; temp: number }>;
+  mostHumid: Array<{ name: string; country: string; humidity: number }>;
+  mostPolluted: Array<{ name: string; country: string; aqi: number }>;
+}
+
 // 全球主要城市ID（可根据需要扩展）
 const CITY_LIST = [
   1816670, // 北京
@@ -37,11 +65,11 @@ const CITY_LIST = [
 const API_KEY = process.env.OPENWEATHERMAP_API_KEY;
 
 // 简单内存缓存，10分钟更新一次
-let cache: any = null;
+let cache: TopCitiesResponse | null = null;
 let cacheTime = 0;
 const CACHE_DURATION = 10 * 60 * 1000;
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   if (!API_KEY) {
     return NextResponse.json({ error: "API key 配置错误" }, { status: 500 });
   }
@@ -56,7 +84,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "获取城市天气失败" }, { status: 500 });
   }
   const data = await res.json();
-  const cities = data.list;
+  const cities: CityWeather[] = data.list;
   // 最热
   const hottest = [...cities].sort((a, b) => b.main.temp - a.main.temp).slice(0, 10);
   // 最冷
@@ -64,7 +92,7 @@ export async function GET(req: NextRequest) {
   // 湿度最高
   const mostHumid = [...cities].sort((a, b) => b.main.humidity - a.main.humidity).slice(0, 10);
   // 空气污染（用AQI，OpenWeatherMap只支持经纬度，取这些城市的第一个空气质量数据）
-  const pollutionPromises = cities.map(async (city: any) => {
+  const pollutionPromises = cities.map(async (city: CityWeather): Promise<CityWithAQI> => {
     const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.coord.lat}&lon=${city.coord.lon}&appid=${API_KEY}`;
     const res = await fetch(url);
     if (!res.ok) return { ...city, aqi: null };
@@ -73,13 +101,13 @@ export async function GET(req: NextRequest) {
   });
   const pollutionList = await Promise.all(pollutionPromises);
   // aqi: 1优 2良 3轻度污染 4中度污染 5重度污染
-  const mostPolluted = pollutionList.filter(c => c.aqi != null).sort((a, b) => b.aqi - a.aqi).slice(0, 10);
+  const mostPolluted = pollutionList.filter(c => c.aqi !== null).sort((a, b) => (b.aqi || 0) - (a.aqi || 0)).slice(0, 10);
 
-  const result = {
+  const result: TopCitiesResponse = {
     hottest: hottest.map(city => ({ name: city.name, country: city.sys.country, temp: city.main.temp })),
     coldest: coldest.map(city => ({ name: city.name, country: city.sys.country, temp: city.main.temp })),
     mostHumid: mostHumid.map(city => ({ name: city.name, country: city.sys.country, humidity: city.main.humidity })),
-    mostPolluted: mostPolluted.map(city => ({ name: city.name, country: city.sys.country, aqi: city.aqi })),
+    mostPolluted: mostPolluted.map(city => ({ name: city.name, country: city.sys.country, aqi: city.aqi || 0 })),
   };
   cache = result;
   cacheTime = now;

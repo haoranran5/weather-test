@@ -1,6 +1,14 @@
 "use client";
 import React, { useState, useEffect } from "react";
 
+// 定义榜单数据类型
+interface TopCitiesData {
+  hottest: Array<{ name: string; country: string; temp: number }>;
+  coldest: Array<{ name: string; country: string; temp: number }>;
+  mostHumid: Array<{ name: string; country: string; humidity: number }>;
+  mostPolluted: Array<{ name: string; country: string; aqi: number }>;
+}
+
 function formatTime(ts: number, tz: number) {
   const date = new Date((ts + tz) * 1000);
   return date.toTimeString().slice(0, 5);
@@ -38,7 +46,7 @@ export default function Page() {
   const [error, setError] = useState("");
 
   // 新增：榜单数据
-  const [topData, setTopData] = useState<any>(null);
+  const [topData, setTopData] = useState<TopCitiesData | null>(null);
   const [topLoading, setTopLoading] = useState(true);
   const [topError, setTopError] = useState("");
 
@@ -51,7 +59,7 @@ export default function Page() {
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || "榜单获取失败");
         setTopData(data);
-      } catch (e: any) {
+      } catch (e: unknown) {
         setTopError(e.message || "榜单获取失败");
       } finally {
         setTopLoading(false);
@@ -143,7 +151,7 @@ export default function Page() {
             <div className="bg-white/90 rounded-xl shadow p-4">
               <div className="font-bold text-lg mb-2 text-orange-600">全球最热城市TOP10</div>
               <ol className="text-sm space-y-1">
-                {topData.hottest.map((c: any, i: number) => (
+                {topData.hottest.map((c, i: number) => (
                   <li key={c.name + c.country} className="flex justify-between">
                     <span>{i + 1}. {c.name} ({c.country})</span>
                     <span className="font-mono">{c.temp}°C</span>
@@ -154,7 +162,7 @@ export default function Page() {
             <div className="bg-white/90 rounded-xl shadow p-4">
               <div className="font-bold text-lg mb-2 text-blue-600">全球最冷城市TOP10</div>
               <ol className="text-sm space-y-1">
-                {topData.coldest.map((c: any, i: number) => (
+                {topData.coldest.map((c, i: number) => (
                   <li key={c.name + c.country} className="flex justify-between">
                     <span>{i + 1}. {c.name} ({c.country})</span>
                     <span className="font-mono">{c.temp}°C</span>
@@ -165,7 +173,7 @@ export default function Page() {
             <div className="bg-white/90 rounded-xl shadow p-4">
               <div className="font-bold text-lg mb-2 text-green-700">全球湿度最高TOP10</div>
               <ol className="text-sm space-y-1">
-                {topData.mostHumid.map((c: any, i: number) => (
+                {topData.mostHumid.map((c, i: number) => (
                   <li key={c.name + c.country} className="flex justify-between">
                     <span>{i + 1}. {c.name} ({c.country})</span>
                     <span className="font-mono">{c.humidity}%</span>
@@ -176,7 +184,7 @@ export default function Page() {
             <div className="bg-white/90 rounded-xl shadow p-4">
               <div className="font-bold text-lg mb-2 text-red-700">全球空气污染最严重TOP10</div>
               <ol className="text-sm space-y-1">
-                {topData.mostPolluted.map((c: any, i: number) => (
+                {topData.mostPolluted.map((c, i: number) => (
                   <li key={c.name + c.country} className="flex justify-between">
                     <span>{i + 1}. {c.name} ({c.country})</span>
                     <span className="font-mono">AQI {c.aqi}</span>
