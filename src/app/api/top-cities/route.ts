@@ -87,6 +87,7 @@ export async function GET() {
   }
   
   try {
+  }
   // 批量获取城市天气
   const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid=${API_KEY}&units=metric&lang=zh_cn`;
   const res = await fetch(groupUrl);
@@ -127,8 +128,4 @@ export async function GET() {
   cache = result;
   cacheTime = now;
   return NextResponse.json(result);
-  } catch (error) {
-    console.error('Top cities API error:', error);
-    return NextResponse.json({ error: "获取排行榜数据失败，请稍后重试" }, { status: 500 });
-  }
 } 
