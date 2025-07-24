@@ -59,7 +59,7 @@ export default function Page() {
     }
   };
 
-  // 获取当前位置天气
+  // 获取当前定位天气
   const fetchCurrentLocationWeather = () => {
     if (!navigator.geolocation) {
       setError("浏览器不支持定位");
@@ -72,21 +72,24 @@ export default function Page() {
       const { latitude, longitude } = pos.coords;
       try {
         const res = await fetch(`/api/weather?lat=${latitude}&lon=${longitude}`);
-        if (!res.ok) throw new Error("未找到当前位置的天气信息");
         const data = await res.json();
+        if (!res.ok) {
+          if (data?.error) {
+            setError(data.error);
+          } else {
+            setError("未找到当前位置的天气信息");
+          }
+          return;
+        }
         setWeather(data);
         setCity("");
       } catch (err: unknown) {
-        if (err instanceof Error) {
-          setError(err.message || "获取天气信息失败");
-        } else {
-          setError("获取天气信息失败");
-        }
+        setError("获取当前位置天气失败，请检查网络");
       } finally {
         setLoading(false);
       }
-    }, () => {
-      setError("定位失败");
+    }, (geoErr) => {
+      setError("定位失败，请检查浏览器权限设置");
       setLoading(false);
     });
   };
