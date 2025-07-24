@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 // 定义城市天气数据类型
 interface CityWeather {
@@ -130,8 +130,8 @@ async function fetchWithRetry(url: string, retries = 3) {
       if (res.ok) return res;
       if (res.status === 401) throw new Error('Invalid API key');
       if (i === retries - 1) throw new Error(`Failed after ${retries} retries`);
-    } catch (err: any) {
-      if (err.message === 'Invalid API key') throw err;
+    } catch (err) {
+      if (err instanceof Error && err.message === 'Invalid API key') throw err;
       if (i === retries - 1) throw err;
       await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
