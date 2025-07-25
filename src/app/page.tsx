@@ -1,440 +1,382 @@
 "use client";
-import React, { useState, useEffect } from "react";
-
-// 热门城市列表
-const POPULAR_CITIES = [
-  "北京", "上海", "广州", "深圳", "杭州", "成都",
-  "New York", "London", "Paris", "Tokyo", "Sydney", "Dubai"
-];
-
-// 定义榜单数据类型
-interface TopCitiesData {
-  hottest: Array<{ name: string; country: string; temp: number }>;
-  coldest: Array<{ name: string; country: string; temp: number }>;
-  mostHumid: Array<{ name: string; country: string; humidity: number }>;
-  mostPolluted: Array<{ name: string; country: string; aqi: number }>;
-}
-
-function formatTime(ts: number, tz: number) {
-  const date = new Date((ts + tz) * 1000);
-  return date.toTimeString().slice(0, 5);
-}
-
-// 在import后添加Weather类型定义
-interface Weather {
-  name: string;
-  sys: {
-    country: string;
-    sunrise: number;
-    sunset: number;
-  };
-  main: {
-    temp: number;
-    feels_like: number;
-    humidity: number;
-    pressure: number;
-  };
-  weather: Array<{
-    main: string;
-    description: string;
-    id: number;
-  }>;
-  wind: {
-    speed: number;
-  };
-  timezone: number;
-}
+import { useState } from "react";
+import EnhancedWeatherSearch from "@/components/EnhancedWeatherSearch";
+import GlobalRankings from "@/components/GlobalRankings";
+import ThemeToggle from "@/components/ThemeToggle";
+import WeatherBackground from "@/components/WeatherBackground";
+import WeatherChart from "@/components/WeatherChart";
+import { formatTemperature, getWeatherEmoji } from "@/lib/utils";
 
 export default function Page() {
-  const [city, setCity] = useState("");
-  const [weather, setWeather] = useState<Weather | null>(null);
+  const [weather, setWeather] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [temperatureUnit, setTemperatureUnit] = useState<'C' | 'F'>('C');
 
-  // 新增：榜单数据
-  const [topData, setTopData] = useState<TopCitiesData | null>(null);
-  const [topLoading, setTopLoading] = useState(true);
-  const [topError, setTopError] = useState("");
-  const [activeTab, setActiveTab] = useState<'hottest' | 'coldest' | 'mostHumid' | 'mostPolluted'>('hottest');
+  const handleSearch = async (cityName: string) => {
+    if (!cityName.trim()) return;
 
-  useEffect(() => {
-    const fetchTop = async () => {
-      setTopLoading(true);
-      setTopError("");
-      try {
-        const res = await fetch("/api/top-cities");
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "榜单获取失败");
-        setTopData(data);
-      } catch (e: unknown) {
-        setTopError((e as Error).message || "榜单获取失败");
-      } finally {
-        setTopLoading(false);
-      }
-    };
-    fetchTop();
-  }, []);
-
-  const fetchWeather = async (cityName?: string) => {
-    const query = cityName ?? city;
-    if (!query) return;
     setLoading(true);
     setError("");
     setWeather(null);
+
     try {
-      const res = await fetch(`/api/weather?city=${encodeURIComponent(query)}`);
-      if (!res.ok) throw new Error("未找到该城市的天气信息");
+      const res = await fetch(`/api/weather?city=${encodeURIComponent(cityName.trim())}`);
       const data = await res.json();
-      setWeather(data);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message || "获取天气信息失败");
-      } else {
-        setError("获取天气信息失败");
+
+      if (!res.ok) {
+        throw new Error(data.error || "获取天气信息失败");
       }
+
+      setWeather(data);
+    } catch (err: any) {
+      setError(err.message || "获取天气信息失败");
     } finally {
       setLoading(false);
     }
   };
 
-  // 获取当前定位天气
-  const fetchCurrentLocationWeather = () => {
+  const handleLocationSearch = () => {
     if (!navigator.geolocation) {
-      setError("浏览器不支持定位");
+      setError("您的浏览器不支持地理定位功能");
       return;
     }
+
     setLoading(true);
     setError("");
     setWeather(null);
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const { latitude, longitude } = pos.coords;
-      try {
-        const res = await fetch(`/api/weather?lat=${latitude}&lon=${longitude}`);
-        const data = await res.json();
-        if (!res.ok) {
-          if (data?.error) {
-            setError(data.error);
-          } else {
-            setError("未找到当前位置的天气信息");
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const res = await fetch(`/api/weather?lat=${latitude}&lon=${longitude}`);
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data.error || "获取当前位置天气失败");
           }
-          return;
+
+          setWeather(data);
+        } catch (err: any) {
+          setError(err.message || "获取当前位置天气失败");
+        } finally {
+          setLoading(false);
         }
-        setWeather(data);
-        setCity("");
-      } catch {
-        setError("获取当前位置天气失败，请检查网络");
-      } finally {
+      },
+      (error) => {
         setLoading(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setError("用户拒绝了地理定位请求。请在浏览器设置中允许位置访问。");
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setError("位置信息不可用。请检查您的网络连接或GPS设置。");
+            break;
+          case error.TIMEOUT:
+            setError("获取位置信息超时。请重试。");
+            break;
+          default:
+            setError("获取位置信息时发生未知错误。");
+            break;
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000 // 5分钟缓存
       }
-    }, () => {
-      setError("定位失败，请检查浏览器权限设置");
-      setLoading(false);
-    });
+    );
   };
 
-  // 天气主图标
-  const getWeatherIcon = (main: string, code: string) => {
-    const codeNum = parseInt(code);
-    if (codeNum >= 200 && codeNum < 300) return "⛈️"; // 雷暴
-    if (codeNum >= 300 && codeNum < 400) return "🌦️"; // 毛毛雨
-    if (codeNum >= 500 && codeNum < 600) return "🌧️"; // 雨
-    if (codeNum >= 600 && codeNum < 700) return "🌨️"; // 雪
-    if (codeNum >= 700 && codeNum < 800) return "🌫️"; // 雾霾
-    if (codeNum === 800) return "☀️"; // 晴天
-    if (codeNum === 801) return "🌤️"; // 少云
-    if (codeNum >= 802 && codeNum <= 804) return "☁️"; // 多云
-    return "❓";
-  };
-
-  // 获取AQI等级描述和颜色
-  const getAQIInfo = (aqi: number) => {
-    switch (aqi) {
-      case 1: return { text: "优", color: "text-green-600", bg: "bg-green-100" };
-      case 2: return { text: "良", color: "text-yellow-600", bg: "bg-yellow-100" };
-      case 3: return { text: "轻度污染", color: "text-orange-600", bg: "bg-orange-100" };
-      case 4: return { text: "中度污染", color: "text-red-600", bg: "bg-red-100" };
-      case 5: return { text: "重度污染", color: "text-purple-600", bg: "bg-purple-100" };
-      default: return { text: "未知", color: "text-gray-600", bg: "bg-gray-100" };
-    }
-  };
-
-  // 渲染榜单内容
-  const renderRankingContent = () => {
-    if (!topData) return null;
-    
-    switch (activeTab) {
-      case 'hottest':
-        return topData.hottest.map((c, i) => (
-          <li key={`${c.name}-${c.country}`} className="flex justify-between items-center py-2 px-3 hover:bg-orange-50 rounded-lg cursor-pointer transition-colors" onClick={() => fetchWeather(c.name)}>
-            <div className="flex items-center gap-3">
-              <span className="w-6 h-6 bg-orange-500 text-white rounded-full flex items-center justify-center text-xs font-bold">{i + 1}</span>
-              <div>
-                <div className="font-medium">{c.name}</div>
-                <div className="text-xs text-gray-500">{c.country}</div>
-              </div>
-            </div>
-            <div className="text-orange-600 font-bold">{c.temp.toFixed(1)}°C</div>
-          </li>
-        ));
-      case 'coldest':
-        return topData.coldest.map((c, i) => (
-          <li key={`${c.name}-${c.country}`} className="flex justify-between items-center py-2 px-3 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors" onClick={() => fetchWeather(c.name)}>
-            <div className="flex items-center gap-3">
-              <span className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">{i + 1}</span>
-              <div>
-                <div className="font-medium">{c.name}</div>
-                <div className="text-xs text-gray-500">{c.country}</div>
-              </div>
-            </div>
-            <div className="text-blue-600 font-bold">{c.temp.toFixed(1)}°C</div>
-          </li>
-        ));
-      case 'mostHumid':
-        return topData.mostHumid.map((c, i) => (
-          <li key={`${c.name}-${c.country}`} className="flex justify-between items-center py-2 px-3 hover:bg-green-50 rounded-lg cursor-pointer transition-colors" onClick={() => fetchWeather(c.name)}>
-            <div className="flex items-center gap-3">
-              <span className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">{i + 1}</span>
-              <div>
-                <div className="font-medium">{c.name}</div>
-                <div className="text-xs text-gray-500">{c.country}</div>
-              </div>
-            </div>
-            <div className="text-green-600 font-bold">{c.humidity}%</div>
-          </li>
-        ));
-      case 'mostPolluted':
-        return topData.mostPolluted.map((c, i) => {
-          const aqiInfo = getAQIInfo(c.aqi);
-          return (
-            <li key={`${c.name}-${c.country}`} className="flex justify-between items-center py-2 px-3 hover:bg-red-50 rounded-lg cursor-pointer transition-colors" onClick={() => fetchWeather(c.name)}>
-              <div className="flex items-center gap-3">
-                <span className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold">{i + 1}</span>
-                <div>
-                  <div className="font-medium">{c.name}</div>
-                  <div className="text-xs text-gray-500">{c.country}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${aqiInfo.bg} ${aqiInfo.color}`}>
-                  {aqiInfo.text}
-                </span>
-                <span className="text-red-600 font-bold">AQI {c.aqi}</span>
-              </div>
-            </li>
-          );
-        });
-      default:
-        return null;
-    }
-  };
+  // 获取当前天气状况用于背景
+  const weatherCondition = weather?.weather?.[0]?.description || weather?.weather?.[0]?.main;
+  const isDay = weather ? new Date().getHours() >= 6 && new Date().getHours() < 18 : true;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      {/* 顶部标题 */}
-      <div className="w-full bg-white/80 backdrop-blur-sm shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-gray-800 text-center">🌍 全球天气预报</h1>
-          <p className="text-gray-600 text-center mt-2">实时天气信息 · 全球城市排行榜</p>
-        </div>
-      </div>
+    <WeatherBackground weatherCondition={weatherCondition} isDay={isDay}>
+      <div className="min-h-screen">
+        {/* 顶部导航栏 */}
+        <header className="relative z-40">
+          <div className="container mx-auto px-6 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center">
+                  <span className="text-2xl">🌍</span>
+                </div>
+                <h1 className="text-2xl font-bold text-white drop-shadow-lg">Weather App</h1>
+              </div>
+              <div className="bg-white/20 backdrop-blur-md rounded-full p-2">
+                <ThemeToggle />
+              </div>
+            </div>
+          </div>
+        </header>
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* 主要内容区域 */}
+      {/* 主要内容 */}
+      <main className="container mx-auto px-6 py-8">
+        {/* 主标题区域 */}
+        <div className="text-center mb-12">
+          <div className="bg-white/10 backdrop-blur-md rounded-3xl p-8 mb-8 border border-white/20">
+            <h2 className="text-4xl font-bold text-white mb-4 drop-shadow-lg">
+              实时天气预报
+            </h2>
+            <p className="text-white/80 text-lg">
+              全球城市天气查询 · 空气质量监测 · 24小时趋势预报
+            </p>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* 左侧：天气查询 */}
-          <div className="lg:col-span-2">
-            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">天气查询</h2>
-              
-              {/* 搜索框 */}
-              <div className="flex gap-3 mb-4">
-                <input
-                  type="text"
-                  value={city}
-                  onChange={e => setCity(e.target.value)}
-                  placeholder="输入城市名（中文或英文）"
-                  className="flex-1 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent text-lg bg-white/80"
-                  onKeyDown={e => { if (e.key === 'Enter') fetchWeather(); }}
-                />
-                <button
-                  onClick={() => fetchWeather()}
-                  className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
-                  disabled={loading}
-                >
-                  {loading ? "搜索中..." : "搜索"}
-                </button>
-              </div>
+          <div className="lg:col-span-2 space-y-6">
+            <EnhancedWeatherSearch
+              onSearch={handleSearch}
+              onLocationSearch={handleLocationSearch}
+              loading={loading}
+              temperatureUnit={temperatureUnit}
+              onTemperatureUnitChange={setTemperatureUnit}
+            />
 
-              <button
-                onClick={fetchCurrentLocationWeather}
-                className="w-full mb-6 bg-gray-100 text-gray-700 rounded-xl py-3 hover:bg-gray-200 transition-colors text-sm font-medium"
-                disabled={loading}
-              >
-                📍 获取当前位置天气
-              </button>
-
-              {/* 热门城市快捷按钮 */}
-              <div className="mb-6">
-                <h3 className="text-sm font-medium text-gray-600 mb-3">热门城市</h3>
-                <div className="flex flex-wrap gap-2">
-                  {POPULAR_CITIES.map(cityName => (
-                    <button
-                      key={cityName}
-                      onClick={() => fetchWeather(cityName)}
-                      className="px-3 py-1.5 bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded-lg text-sm transition-colors"
-                      disabled={loading}
-                    >
-                      {cityName}
-                    </button>
-                  ))}
+          {error && (
+            <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-red-700 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <div className="font-semibold">获取天气信息失败</div>
+                  <div className="text-sm">{error}</div>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* 天气信息显示 */}
-              {loading && (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                  <span className="ml-3 text-blue-600">加载中...</span>
+          {loading && (
+            <div className="text-center py-4">
+              <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+              <span className="ml-2">加载中...</span>
+            </div>
+          )}
+
+          {weather && (
+            <div className="bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/20 shadow-2xl">
+              {/* 主要天气信息 */}
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">{weather.name}</h3>
+                  <p className="text-white/80 text-lg">{weather.sys?.country}</p>
+                  {weather.coord && (
+                    <p className="text-white/60 text-sm mt-1">
+                      📍 {weather.coord.lat.toFixed(2)}°, {weather.coord.lon.toFixed(2)}°
+                    </p>
+                  )}
                 </div>
-              )}
-              
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700">
-                  ❌ {error}
-                </div>
-              )}
-              
-              {weather && (
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
-                  {/* 主要天气信息 */}
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h3 className="text-2xl font-bold text-gray-800">{weather.name}</h3>
-                      <p className="text-gray-600">{weather.sys?.country}</p>
+                <div className="text-right">
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="text-6xl">
+                      {getWeatherEmoji(weather.weather?.[0]?.main || '')}
                     </div>
-                    <div className="text-right">
-                      <div className="text-4xl font-bold text-blue-700">{Math.round(weather.main.temp)}°C</div>
-                      <div className="text-gray-500 text-sm">体感 {Math.round(weather.main.feels_like)}°C</div>
+                    <div className="text-5xl font-bold text-white drop-shadow-lg">
+                      {formatTemperature(weather.main?.temp || 0, temperatureUnit)}
                     </div>
                   </div>
-
-                  {/* 天气描述 */}
-                  <div className="flex items-center justify-center mb-6 bg-white/60 rounded-lg py-4">
-                    <span className="text-4xl mr-3">{getWeatherIcon(weather.weather[0].main, String(weather.weather[0].id))}</span>
-                    <span className="text-lg text-gray-700 font-medium">{weather.weather[0].description}</span>
+                  <div className="text-white/80 text-lg mb-1">
+                    体感 {formatTemperature(weather.main?.feels_like || 0, temperatureUnit)}
                   </div>
+                  <div className="text-white/70 text-base">
+                    {weather.weather?.[0]?.description || '未知'}
+                  </div>
+                  {weather.main?.temp_min && weather.main?.temp_max && (
+                    <div className="text-white/60 text-sm mt-2">
+                      {formatTemperature(weather.main.temp_min, temperatureUnit)} / {formatTemperature(weather.main.temp_max, temperatureUnit)}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                  {/* 详细信息网格 */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white/80 rounded-lg p-4 text-center">
-                      <div className="text-2xl mb-1">💧</div>
-                      <div className="text-xs text-gray-500 mb-1">湿度</div>
-                      <div className="font-semibold text-blue-600">{weather.main.humidity}%</div>
+              {/* 详细信息网格 */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
+                <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 text-center border border-white/30">
+                  <div className="text-3xl mb-2">💧</div>
+                  <div className="text-white/70 text-sm mb-1">湿度</div>
+                  <div className="font-bold text-white text-lg">{weather.main?.humidity || 0}%</div>
+                </div>
+                <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 text-center border border-white/30">
+                  <div className="text-3xl mb-2">💨</div>
+                  <div className="text-white/70 text-sm mb-1">风速</div>
+                  <div className="font-bold text-white text-lg">{(weather.wind?.speed || 0).toFixed(2)} m/s</div>
+                </div>
+                <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 text-center border border-white/30">
+                  <div className="text-3xl mb-2">🌡️</div>
+                  <div className="text-white/70 text-sm mb-1">气压</div>
+                  <div className="font-bold text-white text-lg">{weather.main?.pressure || 0} hPa</div>
+                </div>
+                <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 text-center border border-white/30">
+                  <div className="text-3xl mb-2">👁️</div>
+                  <div className="text-white/70 text-sm mb-1">能见度</div>
+                  <div className="font-bold text-white text-lg">
+                    {weather.visibility ? (weather.visibility / 1000).toFixed(1) + ' km' : '未知'}
+                  </div>
+                </div>
+              </div>
+
+              {/* 时间信息 */}
+              {weather.sys?.sunrise && weather.sys?.sunset && (
+                <div className="mt-6 pt-6 border-t border-white/30">
+                  <div className="flex justify-between">
+                    <div className="flex items-center gap-2 text-white/80">
+                      <span className="text-2xl">🌅</span>
+                      <div>
+                        <div className="text-sm">日出</div>
+                        <div className="font-semibold">
+                          {new Date(weather.sys.sunrise * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
                     </div>
-                    <div className="bg-white/80 rounded-lg p-4 text-center">
-                      <div className="text-2xl mb-1">💨</div>
-                      <div className="text-xs text-gray-500 mb-1">风速</div>
-                      <div className="font-semibold text-blue-600">{weather.wind.speed} m/s</div>
-                    </div>
-                    <div className="bg-white/80 rounded-lg p-4 text-center">
-                      <div className="text-2xl mb-1">🌡️</div>
-                      <div className="text-xs text-gray-500 mb-1">气压</div>
-                      <div className="font-semibold text-blue-600">{weather.main.pressure} hPa</div>
-                    </div>
-                    <div className="bg-white/80 rounded-lg p-4 text-center">
-                      <div className="text-2xl mb-1">🌅</div>
-                      <div className="text-xs text-gray-500 mb-1">日出/日落</div>
-                      <div className="font-semibold text-blue-600 text-xs">
-                        {formatTime(weather.sys.sunrise, weather.timezone)}<br/>
-                        {formatTime(weather.sys.sunset, weather.timezone)}
+                    <div className="flex items-center gap-2 text-white/80">
+                      <span className="text-2xl">🌇</span>
+                      <div>
+                        <div className="text-sm">日落</div>
+                        <div className="font-semibold">
+                          {new Date(weather.sys.sunset * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
+          )}
+
+          {/* 24小时天气趋势 */}
+          {weather && (
+            <WeatherChart
+              cityName={weather.name}
+              lat={weather.coord?.lat}
+              lon={weather.coord?.lon}
+            />
+          )}
           </div>
 
           {/* 右侧：全球排行榜 */}
           <div className="lg:col-span-1">
-            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">全球城市排行榜</h2>
-              
-              {topLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                  <span className="ml-2 text-blue-600 text-sm">加载中...</span>
-                </div>
-              ) : topError ? (
-                <div className="text-center text-red-500 py-8">{topError}</div>
-              ) : topData && (
-                <>
-                  {/* 标签页切换 */}
-                  <div className="flex flex-wrap gap-1 mb-4 bg-gray-100 rounded-lg p-1">
-                    <button
-                      onClick={() => setActiveTab('hottest')}
-                      className={`flex-1 px-2 py-2 rounded-md text-xs font-medium transition-colors ${
-                        activeTab === 'hottest' 
-                          ? 'bg-orange-500 text-white shadow-sm' 
-                          : 'text-gray-600 hover:text-orange-600'
-                      }`}
-                    >
-                      🔥 最热
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('coldest')}
-                      className={`flex-1 px-2 py-2 rounded-md text-xs font-medium transition-colors ${
-                        activeTab === 'coldest' 
-                          ? 'bg-blue-500 text-white shadow-sm' 
-                          : 'text-gray-600 hover:text-blue-600'
-                      }`}
-                    >
-                      🧊 最冷
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('mostHumid')}
-                      className={`flex-1 px-2 py-2 rounded-md text-xs font-medium transition-colors ${
-                        activeTab === 'mostHumid' 
-                          ? 'bg-green-500 text-white shadow-sm' 
-                          : 'text-gray-600 hover:text-green-600'
-                      }`}
-                    >
-                      💧 最湿
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('mostPolluted')}
-                      className={`flex-1 px-2 py-2 rounded-md text-xs font-medium transition-colors ${
-                        activeTab === 'mostPolluted' 
-                          ? 'bg-red-500 text-white shadow-sm' 
-                          : 'text-gray-600 hover:text-red-600'
-                      }`}
-                    >
-                      🏭 污染
-                    </button>
-                  </div>
+            <GlobalRankings
+              onCityClick={handleSearch}
+              temperatureUnit={temperatureUnit}
+            />
+          </div>
+        </div>
 
-                  {/* 排行榜内容 */}
-                  <div className="max-h-96 overflow-y-auto">
-                    <ol className="space-y-1">
-                      {renderRankingContent()}
-                    </ol>
-                  </div>
-                </>
-              )}
+        {/* 功能特色版块 - 现代化毛玻璃设计 */}
+        <div className="bg-white/10 backdrop-blur-md rounded-3xl p-8 mt-12 border border-white/20 shadow-2xl">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-white mb-3 drop-shadow-lg">✨ 功能特色</h2>
+            <p className="text-white/80 text-lg">专业级天气服务，为您提供全方位的气象信息</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* 智能城市搜索 */}
+            <div className="group relative bg-white/15 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-400/20 to-emerald-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center mb-4">
+                  <span className="text-2xl">🔍</span>
+                </div>
+                <h3 className="font-bold text-white text-lg mb-3">智能城市搜索</h3>
+                <p className="text-white/80 text-sm leading-relaxed">支持中英文搜索，自动完成建议，搜索历史记录</p>
+              </div>
+            </div>
+
+            {/* 本地天气查询 */}
+            <div className="group relative bg-white/15 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-cyan-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center mb-4">
+                  <span className="text-2xl">📍</span>
+                </div>
+                <h3 className="font-bold text-white text-lg mb-3">本地天气查询</h3>
+                <p className="text-white/80 text-sm leading-relaxed">自动获取当前位置，显示本地实时天气</p>
+              </div>
+            </div>
+
+            {/* 详细天气信息 */}
+            <div className="group relative bg-white/15 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-400/20 to-violet-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center mb-4">
+                  <span className="text-2xl">🌡️</span>
+                </div>
+                <h3 className="font-bold text-white text-lg mb-3">详细天气信息</h3>
+                <p className="text-white/80 text-sm leading-relaxed">温度、湿度、风速、气压、能见度等完整数据</p>
+              </div>
+            </div>
+
+            {/* 日出日落时间 */}
+            <div className="group relative bg-white/15 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-400/20 to-amber-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center mb-4">
+                  <span className="text-2xl">🌅</span>
+                </div>
+                <h3 className="font-bold text-white text-lg mb-3">日出日落时间</h3>
+                <p className="text-white/80 text-sm leading-relaxed">显示当地日出日落时间，方便出行规划</p>
+              </div>
+            </div>
+
+            {/* 全球排行榜 */}
+            <div className="group relative bg-white/15 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
+              <div className="absolute inset-0 bg-gradient-to-br from-red-400/20 to-rose-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center mb-4">
+                  <span className="text-2xl">🔥</span>
+                </div>
+                <h3 className="font-bold text-white text-lg mb-3">全球排行榜</h3>
+                <p className="text-white/80 text-sm leading-relaxed">最热、最冷、污染最严重城市TOP10数据</p>
+              </div>
+            </div>
+
+            {/* 温度单位切换 */}
+            <div className="group relative bg-white/15 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/20 to-blue-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center mb-4">
+                  <span className="text-2xl">🌡️</span>
+                </div>
+                <h3 className="font-bold text-white text-lg mb-3">温度单位切换</h3>
+                <p className="text-white/80 text-sm leading-relaxed">支持摄氏度和华氏度自由切换</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* 底部信息 */}
-      <div className="bg-white/80 backdrop-blur-sm border-t border-gray-200 mt-12">
-        <div className="max-w-6xl mx-auto px-4 py-6 text-center text-gray-500 text-sm">
-          <p>
-            数据来源: <a href="https://openweathermap.org/" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">OpenWeatherMap API</a>
-          </p>
-          <p className="mt-1">© 2025 全球天气应用 · 实时更新</p>
+
+      </main>
+
+      {/* 底部信息 - 现代化设计 */}
+      <footer className="mt-16">
+        <div className="container mx-auto px-6 py-8">
+          <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20">
+            <div className="text-center text-white/80 space-y-3">
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <span className="text-2xl">🌍</span>
+                <span className="text-lg font-semibold text-white">Weather App</span>
+              </div>
+              <p className="text-sm">
+                数据来源:
+                <a
+                  href="https://openweathermap.org/"
+                  className="text-white hover:text-white/80 underline decoration-white/50 hover:decoration-white/80 transition-colors ml-1"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  OpenWeatherMap API
+                </a>
+              </p>
+              <p className="text-sm">© 2025 全球天气应用 · 实时更新 · 专业气象服务</p>
+            </div>
+          </div>
         </div>
+      </footer>
       </div>
-    </div>
+    </WeatherBackground>
   );
 }

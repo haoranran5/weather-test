@@ -2,13 +2,12 @@ import React from 'react';
 import { TopCitiesData, RankingType, WeatherInfo } from '@/types/weather';
 import { getAQIInfo } from '@/utils/weather';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Flame, Snowflake, Droplets, Factory, TrendingUp } from 'lucide-react';
 
-interface TopCitiesListProps {
+interface SimpleTopCitiesListProps {
   data: TopCitiesData | null;
   loading: boolean;
   error: string;
@@ -17,18 +16,17 @@ interface TopCitiesListProps {
   onCityClick: (cityName: string) => void;
 }
 
-export default function TopCitiesList({
-  data,
-  loading,
-  error,
-  activeTab,
-  onTabChange,
-  onCityClick
-}: TopCitiesListProps) {
-
+export default function SimpleTopCitiesList({ 
+  data, 
+  loading, 
+  error, 
+  activeTab, 
+  onTabChange, 
+  onCityClick 
+}: SimpleTopCitiesListProps) {
   const renderRankingContent = (type: RankingType) => {
     if (!data) return null;
-
+    
     const currentData = data[type];
     if (!currentData || currentData.length === 0) {
       return (
@@ -48,10 +46,10 @@ export default function TopCitiesList({
           default: return <TrendingUp className="h-4 w-4" />;
         }
       };
-
+      
       return (
-        <div
-          key={`${city.name}-${city.country}`}
+        <div 
+          key={`${city.name}-${city.country}`} 
           className="flex justify-between items-center p-3 hover:bg-muted/50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-border"
           onClick={() => onCityClick(city.name)}
         >
@@ -82,7 +80,7 @@ export default function TopCitiesList({
               </>
             ) : (
               <div className="font-bold">
-                {type === 'hottest' || type === 'coldest'
+                {type === 'hottest' || type === 'coldest' 
                   ? `${city.value.toFixed(1)}°C`
                   : type === 'mostHumid'
                   ? `${city.value}%`
@@ -96,6 +94,13 @@ export default function TopCitiesList({
     });
   };
 
+  const tabs = [
+    { key: 'hottest' as RankingType, label: '🔥 最热', icon: Flame },
+    { key: 'coldest' as RankingType, label: '❄️ 最冷', icon: Snowflake },
+    { key: 'mostHumid' as RankingType, label: '💧 最湿', icon: Droplets },
+    { key: 'mostPolluted' as RankingType, label: '🏭 污染', icon: Factory },
+  ];
+
   return (
     <Card>
       <CardHeader>
@@ -107,7 +112,7 @@ export default function TopCitiesList({
           实时更新的全球城市天气数据排行
         </CardDescription>
       </CardHeader>
-
+      
       <CardContent>
         {loading ? (
           <div className="space-y-3">
@@ -127,50 +132,29 @@ export default function TopCitiesList({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : data && (
-          <Tabs value={activeTab} onValueChange={(value) => onTabChange(value as RankingType)}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="hottest" className="text-xs">
-                <Flame className="h-3 w-3 mr-1" />
-                最热
-              </TabsTrigger>
-              <TabsTrigger value="coldest" className="text-xs">
-                <Snowflake className="h-3 w-3 mr-1" />
-                最冷
-              </TabsTrigger>
-              <TabsTrigger value="mostHumid" className="text-xs">
-                <Droplets className="h-3 w-3 mr-1" />
-                最湿
-              </TabsTrigger>
-              <TabsTrigger value="mostPolluted" className="text-xs">
-                <Factory className="h-3 w-3 mr-1" />
-                污染
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="hottest" className="mt-4">
-              <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-2">
-                {renderRankingContent('hottest')}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="coldest" className="mt-4">
-              <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-2">
-                {renderRankingContent('coldest')}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="mostHumid" className="mt-4">
-              <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-2">
-                {renderRankingContent('mostHumid')}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="mostPolluted" className="mt-4">
-              <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-2">
-                {renderRankingContent('mostPolluted')}
-              </div>
-            </TabsContent>
-          </Tabs>
+          <div>
+            {/* 简单的标签页切换 */}
+            <div className="flex flex-wrap gap-1 mb-4 bg-muted rounded-lg p-1">
+              {tabs.map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => onTabChange(tab.key)}
+                  className={`flex-1 px-2 py-2 rounded-md text-xs font-medium transition-colors ${
+                    activeTab === tab.key 
+                      ? 'bg-background text-foreground shadow-sm' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            
+            {/* 排行榜内容 */}
+            <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-2">
+              {renderRankingContent(activeTab)}
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

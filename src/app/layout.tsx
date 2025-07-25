@@ -1,34 +1,24 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
-
 export const metadata: Metadata = {
-  title: "全球天气预报 - OpenWeather",
-  description: "基于OpenWeatherMap API的全球天气查询应用，提供实时天气信息和全球城市排行榜",
+  title: "全球天气预报 - 实时天气查询与城市排行榜",
+  description: "基于OpenWeatherMap API的全球天气查询应用，提供实时天气信息、全球最热最冷城市TOP10、湿度排行榜、空气质量指数等功能",
+  keywords: "天气预报,全球天气,城市排行榜,温度,湿度,空气质量,AQI,实时天气",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+    <html lang="zh-CN" suppressHydrationWarning>
+      <body className="min-h-screen bg-background text-foreground">
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
