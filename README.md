@@ -32,8 +32,9 @@
 - **最热城市 TOP10**：实时展示全球气温最高的城市
 - **最冷城市 TOP10**：实时展示全球气温最低的城市
 - **湿度最高 TOP10**：展示全球湿度最高的城市
-- **空气污染最严重 TOP10**：基于AQI排序，颜色编码显示污染程度
+- **风速最大 TOP10**：展示全球风速最大的城市
 - 点击城市名可直接查询该城市详细天气
+- 性能优化：3秒内快速加载，支持1小时智能缓存
 
 ### 📊 API状态监控
 
@@ -57,12 +58,14 @@
 ## 📦 安装和运行
 
 ### 1. 克隆项目
+
 ```bash
-git clone <repository-url>
+git clone https://github.com/haoranran5/weather-test.git
 cd weather-test
 ```
 
 ### 2. 安装依赖
+
 ```bash
 npm install
 # 或
@@ -72,7 +75,9 @@ pnpm install
 ```
 
 ### 3. 配置环境变量
+
 复制 `.env.example` 文件为 `.env.local`：
+
 ```bash
 cp .env.example .env.local
 ```
@@ -112,6 +117,7 @@ TOMORROW_API_KEY=your_tomorrow_io_key_here
    - 免费额度：每天500次调用
 
 ### 5. 启动开发服务器
+
 ```bash
 npm run dev
 # 或
@@ -190,8 +196,9 @@ src/
 
 ### 全球排行榜 API
 
-- **路径**: `/api/global-rankings-weatherapi`
-- **返回**: 全球城市各项指标排行榜数据（最热、最冷、湿度、污染）
+- **路径**: `/api/global-rankings-fast`
+- **返回**: 全球城市各项指标排行榜数据（最热、最冷、湿度、风速）
+- **性能**: 3秒快速加载，支持1小时智能缓存
 
 ### API状态监控
 
@@ -212,17 +219,20 @@ src/
 4. 部署完成
 
 ### 其他平台
+
 项目支持部署到任何支持 Node.js 的平台，如 Netlify、Railway 等。
 
 ## 🔧 开发
 
 ### 构建生产版本
+
 ```bash
 npm run build
 npm run start
 ```
 
 ### 代码检查
+
 ```bash
 npm run lint
 ```
