@@ -120,30 +120,201 @@ const CITY_LIST = [
   264371   // 雅典 Athens
 ];
 
-const API_KEY = process.env.OPENWEATHERMAP_API_KEY;
+// API提供商类型
+type APIProvider = 'openweathermap' | 'weatherstack' | 'weatherbit';
+
+// API密钥配置
+const API_KEYS = {
+  openweathermap: [
+    process.env.OPENWEATHERMAP_API_KEY,
+    process.env.OPENWEATHERMAP_API_KEY_BACKUP
+  ].filter(Boolean) as string[],
+  weatherstack: [
+    process.env.WEATHERSTACK_API_KEY
+  ].filter(Boolean) as string[],
+  weatherbit: [
+    process.env.WEATHERBIT_API_KEY
+  ].filter(Boolean) as string[]
+};
+
+// API提供商的限制类型
+type LimitType = 'daily' | 'monthly' | 'none';
+
+// API限制配置
+interface APILimit {
+  limit: number;
+  type: LimitType;
+}
+
+// 每个API提供商的请求限制
+const API_LIMITS: Record<APIProvider, APILimit> = {
+  openweathermap: { limit: Infinity, type: 'none' }, // OpenWeatherMap没有严格限制
+  weatherstack: { limit: 100, type: 'monthly' }, // Weatherstack每月100次
+  weatherbit: { limit: 50, type: 'daily' } // Weatherbit每天50次
+};
+
+// 记录API调用次数
+const API_CALLS: Record<APIProvider, number> = {
+  openweathermap: 0,
+  weatherstack: 0,
+  weatherbit: 0
+};
+
+// 上次重置计数器的时间
+const LAST_RESET: Record<APIProvider, Date> = {
+  openweathermap: new Date(),
+  weatherstack: new Date(),
+  weatherbit: new Date()
+};
+
+// 用于记录当前使用的API key索引
+const currentApiKeyIndex: Record<APIProvider, number> = {
+  openweathermap: 0,
+  weatherstack: 0,
+  weatherbit: 0
+};
+
+// 检查并更新API调用计数
+function checkAndUpdateApiLimit(provider: APIProvider): boolean {
+  const now = new Date();
+  const limitConfig = API_LIMITS[provider];
+  const lastReset = LAST_RESET[provider];
+
+  // 根据限制类型检查是否需要重置计数器
+  let needsReset = false;
+  switch (limitConfig.type) {
+    case 'daily':
+      needsReset = now.getDate() !== lastReset.getDate() ||
+                  now.getMonth() !== lastReset.getMonth() ||
+                  now.getFullYear() !== lastReset.getFullYear();
+      break;
+    case 'monthly':
+      needsReset = now.getMonth() !== lastReset.getMonth() ||
+                  now.getFullYear() !== lastReset.getFullYear();
+      break;
+    case 'none':
+      return true; // 无限制的API直接返回true
+  }
+
+  if (needsReset) {
+    API_CALLS[provider] = 0;
+    LAST_RESET[provider] = now;
+  }
+
+  // 检查是否超出限制
+  if (API_CALLS[provider] >= limitConfig.limit) {
+    const limitType = limitConfig.type === 'daily' ? '今日' : '本月';
+    console.warn(`服务访问受限`);
+    return false;
+  }
+
+  API_CALLS[provider]++;
+  console.log(`服务使用状态正常`);
+  return true;
+}
+
+// 获取下一个可用的API key
+function getNextApiKey(provider: APIProvider): string | null {
+  const keys = API_KEYS[provider];
+  const index = currentApiKeyIndex[provider];
+  const key = keys[index];
+  // 循环使用API keys
+  currentApiKeyIndex[provider] = (index + 1) % keys.length;
+  return key || null;
+}
+
+// 使用特定的API key进行请求
+async function fetchWithKey(url: string, provider: APIProvider = 'openweathermap', retries = 3): Promise<any> {
+  const initialKeyIndex = currentApiKeyIndex[provider];
+  let lastError: Error | null = null;
+
+  // 检查API限制
+  if (!checkAndUpdateApiLimit(provider)) {
+    throw new Error(`${provider} API 已达到本月使用限制`);
+  }
+
+  // 尝试所有可用的API keys
+  for (let i = 0; i < API_KEYS[provider].length; i++) {
+    const apiKey = getNextApiKey(provider);
+    if (!apiKey) continue;
+
+    const urlWithKey = url.replace(/{apiKey}/g, apiKey);
+    try {
+      const result = await fetchWithRetry(urlWithKey, retries);
+      console.log(`API请求成功`);
+      return result;
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`API请求失败，尝试下一个服务`);
+      continue;
+    }
+  }
+
+  // 重置到初始的API key索引
+  currentApiKeyIndex[provider] = initialKeyIndex;
+  throw lastError || new Error(`所有${provider} API密钥都无效`);
+}
+
+// 转换天气数据的工具函数
+const toWeatherInfo = (
+  city: CityWeather | CityWithAQI,
+  value: number,
+  extraData?: { 
+    windSpeed?: number;
+    pressure?: number;
+    visibility?: number;
+    feelsLike?: number;
+    temp?: number;
+  }
+): WeatherInfo => ({
+  name: city.name,
+  country: city.sys.country,
+  countryName: COUNTRY_NAMES[city.sys.country] || city.sys.country,
+  value,
+  extra: extraData
+});
 
 // 添加错误重试机制和详细的错误处理
 async function fetchWithRetry(url: string, retries = 3) {
   let lastError: Error | null = null;
+      console.log(`正在请求天气数据...`);
   
   for (let i = 0; i < retries; i++) {
     try {
-      const res = await fetch(url);
-      const data = await res.json();
-      
-      // 检查API响应中的具体错误
-      if (data.cod && data.cod !== 200) {
-        const errorMsg = data.message || '未知错误';
-        if (data.cod === 401) {
-          throw new Error(`API认证失败: ${errorMsg}`);
+      // 添加超时设置
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.log(`请求超时，正在重试`);
+      }, 30000); // 增加超时时间到30秒
+
+      console.log(`第 ${i + 1} 次尝试`);      const res = await fetch(url, {
+        signal: controller.signal,
+        next: { revalidate: 0 }, // 禁用缓存
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'WeatherTest/1.0'
         }
-        throw new Error(`API错误 (${data.cod}): ${errorMsg}`);
+      });
+
+      clearTimeout(timeoutId);
+
+      // 确保我们能读取响应体
+      const text = await res.text();
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`数据解析失败`);
       }
       
-      if (!res.ok) {
-        throw new Error(`HTTP错误: ${res.status} ${res.statusText}`);
+      // 检查响应状态
+      if (!res.ok || (data.cod && data.cod !== 200)) {
+        throw new Error(`请求失败`);
       }
       
+      console.log(`数据获取成功`);
       return data;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -155,12 +326,12 @@ async function fetchWithRetry(url: string, retries = 3) {
       
       // 最后一次重试失败
       if (i === retries - 1) {
-        console.error(`请求失败 (重试 ${retries} 次后)：`, url, lastError);
+        console.error(`数据请求失败`);
         throw lastError;
       }
       
-      // 等待后重试，使用指数退避策略
-      const delay = Math.min(1000 * Math.pow(2, i), 10000);
+      // 等待后重试，使用较长的固定延迟
+      const delay = 5000; // 固定5秒延迟
       await new Promise(r => setTimeout(r, delay));
     }
   }
@@ -187,19 +358,15 @@ let cache: CacheData | null = null;
 async function updateCache(): Promise<CacheData> {
   const fetchStart = Date.now();
   
-  // 验证API key格式
-  if (typeof API_KEY !== 'string' || API_KEY.length !== 32) {
-    throw new Error('API key 格式错误，请确保是32位的有效密钥');
+  // 验证是否有可用的API key
+  if (API_KEYS.openweathermap.length === 0 && API_KEYS.weatherstack.length === 0) {
+    throw new Error('未配置任何API key，请检查环境变量配置');
   }
 
   try {
-    // 获取所有数据...
-    const testUrl = `https://api.openweathermap.org/data/2.5/weather?id=1816670&appid=${API_KEY}&units=metric`;
-    const testData = await fetchWithRetry(testUrl);
-    
     // 获取城市天气数据
-    const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid=${API_KEY}&units=metric&lang=zh_cn`;
-    const data = await fetchWithRetry(groupUrl);
+    const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid={apiKey}&units=metric&lang=zh_cn`;
+    const data = await fetchWithKey(groupUrl);
     
     if (!data.list || !Array.isArray(data.list)) {
       throw new Error('API返回数据格式错误');
@@ -211,20 +378,17 @@ async function updateCache(): Promise<CacheData> {
     const pollutionList = await Promise.all(
       cities.map(async (city) => {
         try {
-          const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.coord.lat}&lon=${city.coord.lon}&appid=${API_KEY}`;
-          const air = await fetchWithRetry(url);
+          const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.coord.lat}&lon=${city.coord.lon}&appid={apiKey}`;
+          const air = await fetchWithKey(url);
           return { ...city, aqi: air.list?.[0]?.main?.aqi ?? null };
         } catch (error) {
-          console.warn(`无法获取 ${city.name} 的空气质量数据:`, error);
+          console.warn(`空气质量数据暂时不可用`);
           return { ...city, aqi: null };
         }
       })
     );
 
-    // 处理数据...
-    const result = processWeatherData(cities, pollutionList);
-    
-        // 处理排行榜数据
+    // 处理排行榜数据
     const hottest = [...cities]
       .sort((a, b) => b.main.temp - a.main.temp)
       .slice(0, 10)
@@ -307,15 +471,13 @@ async function updateCache(): Promise<CacheData> {
 }
 
 export async function GET() {
-  if (!API_KEY) {
-    console.error('API_KEY is missing:', API_KEY);
-    return NextResponse.json({ 
-      error: "API key 配置错误",
-      hint: "请确保在环境变量中正确配置了 OPENWEATHERMAP_API_KEY"
-    }, { status: 500 });
-  }
-  
-  const now = Date.now();
+    if (API_KEYS.openweathermap.length === 0 && API_KEYS.weatherstack.length === 0) {
+      console.error('系统配置不完整');
+      return NextResponse.json({ 
+        error: "系统维护中",
+        hint: "请稍后再试"
+      }, { status: 500 });
+    }  const now = Date.now();
   
   // 检查缓存
   if (cache) {
@@ -348,48 +510,81 @@ export async function GET() {
   
   try {
     // 验证API key格式
-    if (typeof API_KEY !== 'string' || API_KEY.length !== 32) {
-      console.error('Invalid API key format:', API_KEY);
-      return NextResponse.json({
-        error: "API key 格式错误，请确保是32位的有效密钥",
-        hint: "请在 .env.local 文件中正确设置 OPENWEATHERMAP_API_KEY"
-      }, { status: 400 });
+    // 测试可用的API服务
+    console.log('正在连接天气服务...');
+    
+    async function testAPI(provider: APIProvider): Promise<boolean> {
+      try {
+        let testUrl;
+        switch (provider) {
+          case 'openweathermap':
+            testUrl = `https://api.openweathermap.org/data/2.5/weather?id=1816670&appid={apiKey}&units=metric`;
+            break;
+          case 'weatherstack':
+            testUrl = `http://api.weatherstack.com/current?access_key={apiKey}&query=Beijing`;
+            break;
+          case 'weatherbit':
+            testUrl = `https://api.weatherbit.io/v2.0/current?city=Beijing&key={apiKey}`;
+            break;
+        }
+        
+        await fetchWithKey(testUrl, provider);
+        console.log(`服务连接成功`);
+        return true;
+      } catch (error) {
+        console.warn(`服务暂时不可用`);
+        return false;
+      }
     }
 
-    // 先测试API key是否有效 - 使用单个城市测试
-    const testUrl = `https://api.openweathermap.org/data/2.5/weather?id=1816670&appid=${API_KEY}&units=metric`;
-    console.log('正在验证 API key...');
+    // 优先测试 OpenWeatherMap API
+    const openweatherValid = await testAPI('openweathermap');
     
-    try {
-      const testData = await fetchWithRetry(testUrl);
-      console.log('API key 验证成功');
-    } catch (error) {
-      console.error('API key 验证失败:', error);
-      if (error instanceof Error && error.message.includes('API认证失败')) {
-        return NextResponse.json({
-          error: "API key 无效，请检查 OpenWeatherMap API key 是否正确",
-          details: error.message,
-          hint: "请确保在 OpenWeatherMap 网站激活了您的 API key，并且有足够的配额"
-        }, { status: 401 });
-      }
+    // 只有当 OpenWeatherMap 不可用时才测试 Weatherstack
+    let weatherstackValid = false;
+    if (!openweatherValid && API_KEYS.weatherstack.length > 0) {
+      weatherstackValid = await testAPI('weatherstack');
+    }
+
+    if (!openweatherValid && !weatherstackValid) {
+      console.error('服务暂时不可用');
       return NextResponse.json({
-        error: "API 验证失败",
-        details: error instanceof Error ? error.message : String(error)
+        error: "天气服务暂时不可用",
+        hint: "请稍后再试"
       }, { status: 500 });
     }
     
-    console.log('API key test successful, proceeding with batch request...');
+    console.log('服务认证成功');
+    
+    // 转换函数
+    const toWeatherInfo = (
+      city: CityWeather | CityWithAQI,
+      value: number,
+      extraData?: { 
+        windSpeed?: number;
+        pressure?: number;
+        visibility?: number;
+        feelsLike?: number;
+        temp?: number;
+      }
+    ): WeatherInfo => ({
+      name: city.name,
+      country: city.sys.country,
+      countryName: COUNTRY_NAMES[city.sys.country] || city.sys.country,
+      value,
+      extra: extraData
+    });
     
     // 批量获取城市天气
-    const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid=${API_KEY}&units=metric&lang=zh_cn`;
+    const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid={apiKey}&units=metric&lang=zh_cn`;
     console.log('正在获取批量城市天气数据...');
     
     let data;
     try {
-      data = await fetchWithRetry(groupUrl);
+      data = await fetchWithKey(groupUrl, 'openweathermap');
       console.log('成功获取城市天气数据');
     } catch (error) {
-      console.error('批量获取城市天气失败:', error);
+      console.error('数据同步失败');
       return NextResponse.json({
         error: "获取城市天气失败",
         details: error instanceof Error ? error.message : String(error),
@@ -410,8 +605,8 @@ export async function GET() {
     // 获取空气质量数据
     const pollutionPromises = cities.map(async (city: CityWeather): Promise<CityWithAQI> => {
       try {
-        const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.coord.lat}&lon=${city.coord.lon}&appid=${API_KEY}`;
-        const air = await fetchWithRetry(url);
+        const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.coord.lat}&lon=${city.coord.lon}&appid={apiKey}`;
+        const air = await fetchWithKey(url, 'openweathermap');
         return { ...city, aqi: air.list?.[0]?.main?.aqi ?? null };
       } catch (error) {
         console.warn(`无法获取 ${city.name} 的空气质量数据:`, error);
@@ -421,25 +616,6 @@ export async function GET() {
     
     const pollutionList = await Promise.all(pollutionPromises);
     
-    // 转换函数
-    const toWeatherInfo = (
-      city: CityWeather | CityWithAQI,
-      value: number,
-      extraData?: { 
-        windSpeed?: number;
-        pressure?: number;
-        visibility?: number;
-        feelsLike?: number;
-        temp?: number;
-      }
-    ): WeatherInfo => ({
-      name: city.name,
-      country: city.sys.country,
-      countryName: COUNTRY_NAMES[city.sys.country] || city.sys.country,
-      value,
-      extra: extraData
-    });
-
     // 处理各种排行榜数据
     const hottest = [...cities]
       .sort((a, b) => b.main.temp - a.main.temp)
@@ -514,7 +690,15 @@ export async function GET() {
 
     return NextResponse.json(weatherData);
   } catch (error) {
-    console.error('Top cities API error:', error);
-    return NextResponse.json({ error: "获取城市排行榜失败" }, { status: 500 });
+    console.error('数据获取失败');
+    return NextResponse.json({ 
+      error: "数据暂时不可用",
+      hint: "请稍后再试"
+    }, { 
+      status: 500,
+      headers: {
+        'Cache-Control': 'no-store'
+      }
+    });
   }
 } 
