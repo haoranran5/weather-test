@@ -68,6 +68,7 @@ export function getAQIInfo(aqi: number) {
 }
 
 // 防抖函数
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
@@ -90,7 +91,7 @@ export const storage = {
       return null;
     }
   },
-  set: (key: string, value: any) => {
+  set: (key: string, value: unknown) => {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(key, JSON.stringify(value));
@@ -116,7 +117,7 @@ interface CacheItem<T> {
 }
 
 export class DataCache {
-  private cache = new Map<string, CacheItem<any>>();
+  private cache = new Map<string, CacheItem<unknown>>();
 
   set<T>(key: string, data: T, ttlMinutes: number = 30): void {
     const now = Date.now();

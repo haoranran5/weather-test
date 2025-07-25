@@ -74,7 +74,7 @@ function getOpenWeatherKey(): string | null {
 }
 
 // 使用OpenWeatherMap API
-async function fetchOpenWeatherData(url: string): Promise<any> {
+async function fetchOpenWeatherData(url: string): Promise<unknown> {
   const apiKey = getOpenWeatherKey();
   if (!apiKey) {
     throw new Error('OpenWeatherMap API 调用次数已达上限');
@@ -92,35 +92,7 @@ async function fetchOpenWeatherData(url: string): Promise<any> {
 }
 
 // 使用Tomorrow.io API作为备用
-async function fetchTomorrowData(cities: string[]): Promise<any[]> {
-  checkAndResetCounters();
 
-  const config = API_CONFIG.tomorrow;
-  if (config.counter >= config.limit) {
-    throw new Error('Tomorrow.io API 调用次数已达上限');
-  }
-
-  const results = [];
-
-  // Tomorrow.io API 需要逐个城市查询
-  for (const cityId of cities.slice(0, 20)) { // 限制查询数量
-    try {
-      const response = await fetch(
-        `https://api.tomorrow.io/v4/weather/realtime?location=${cityId}&apikey=${config.key}&units=metric`
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        results.push(data);
-        config.counter++;
-      }
-    } catch (error) {
-      console.warn(`Tomorrow.io API 查询失败: ${cityId}`, error);
-    }
-  }
-
-  return results;
-}
 
 // 生成模拟天气数据（当API失败时使用）
 function generateMockWeatherData(): CityWeather[] {
@@ -167,14 +139,14 @@ function generateMockWeatherData(): CityWeather[] {
 }
 
 // 转换城市数据为WeatherInfo格式
-function toWeatherInfo(city: CityWeather, value: number, extra?: any): WeatherInfo {
+function toWeatherInfo(city: CityWeather, value: number, extra?: Record<string, unknown>): WeatherInfo {
   return {
     name: city.name,
     country: city.sys.country,
     countryName: COUNTRY_NAMES[city.sys.country] || city.sys.country,
     value: value,
     humidity: city.main.humidity,
-    aqi: extra?.aqi || null,
+    aqi: (typeof extra?.aqi === 'number') ? extra.aqi : null,
     ...extra
   };
 }

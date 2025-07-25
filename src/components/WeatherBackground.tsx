@@ -418,7 +418,6 @@ function SnowEffect() {
       {Array.from({ length: 100 }, (_, i) => {
         const size = Math.random() * 8 + 6; // 6-14px
         const opacity = Math.random() * 0.6 + 0.4; // 0.4-1.0
-        const drift = Math.random() * 100 - 50; // -50 to 50px horizontal drift
         const speed = Math.random() * 3 + 2; // 2-5s
         const snowflake = snowflakes[Math.floor(Math.random() * snowflakes.length)];
 

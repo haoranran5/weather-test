@@ -212,7 +212,6 @@ export const CITY_TRANSLATIONS: Record<string, string> = {
   
   // 非洲
   "Lagos": "拉各斯",
-  "Cairo": "开罗",
   "Kinshasa": "金沙萨",
   "Luanda": "罗安达",
   "Nairobi": "内罗毕",
@@ -262,7 +261,6 @@ export const CITY_TRANSLATIONS: Record<string, string> = {
   "Auckland": "奥克兰",
   "Wellington": "惠灵顿",
   "Christchurch": "基督城",
-  "Hamilton": "汉密尔顿",
   "Tauranga": "陶朗加",
   "Napier": "内皮尔",
   "Dunedin": "但尼丁",

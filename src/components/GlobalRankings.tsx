@@ -3,9 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Flame, Snowflake, Droplets, Factory, RefreshCw, TrendingUp } from 'lucide-react';
-import { formatTemperature, getAQIInfo } from '@/lib/utils';
-import { getRandomCities } from '@/lib/cities-data';
+import { Flame, Snowflake, Factory, RefreshCw, TrendingUp } from 'lucide-react';
+import { formatTemperature } from '@/lib/utils';
 
 interface CityRankingData {
   name: string;
@@ -55,8 +54,14 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
     setError('');
     
     try {
-      const res = await fetch('/api/global-rankings-weatherapi');
+      console.log('🚀 开始获取全球排行榜数据（快速版本）');
+      const startTime = Date.now();
+
+      const res = await fetch('/api/global-rankings-fast');
       const data = await res.json();
+
+      const endTime = Date.now();
+      console.log(`✅ 排行榜数据获取完成，前端耗时: ${endTime - startTime}ms`);
       
       if (!res.ok) {
         throw new Error(data.error || '获取排行榜数据失败');
@@ -64,8 +69,8 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
       
       setRankings(data);
       setLastUpdate(new Date());
-    } catch (err: any) {
-      setError(err.message || '获取排行榜数据失败');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '获取排行榜数据失败');
     } finally {
       setLoading(false);
     }
@@ -79,7 +84,7 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
     return () => clearInterval(interval);
   }, []);
 
-  const renderRankingItem = (item: CityRankingData, index: number, type: 'hottest' | 'coldest' | 'mostPolluted') => {
+  const renderRankingItem = (item: CityRankingData, index: number, type: 'hottest' | 'coldest' | 'mostHumid' | 'windiest') => {
     const getRankIcon = () => {
       if (index < 3) {
         const medals = ['🥇', '🥈', '🥉'];
@@ -93,8 +98,10 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
         case 'hottest':
         case 'coldest':
           return formatTemperature(item.value, temperatureUnit);
-        case 'mostPolluted':
-          return item.airQualityLevel || `AQI ${item.value}`;
+        case 'mostHumid':
+          return `${item.value}%`;
+        case 'windiest':
+          return `${item.value} m/s`;
         default:
           return item.value;
       }
@@ -106,8 +113,10 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
           return 'text-orange-600';
         case 'coldest':
           return 'text-blue-600';
-        case 'mostPolluted':
-          return item.airQualityColor || 'text-red-600';
+        case 'mostHumid':
+          return 'text-blue-500';
+        case 'windiest':
+          return 'text-green-600';
         default:
           return 'text-gray-600';
       }
@@ -216,7 +225,7 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="hottest" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="hottest" className="text-xs">
               <Flame className="h-4 w-4 mr-1" />
               最热
@@ -225,9 +234,13 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
               <Snowflake className="h-4 w-4 mr-1" />
               最冷
             </TabsTrigger>
-            <TabsTrigger value="mostPolluted" className="text-xs">
-              <Factory className="h-4 w-4 mr-1" />
-              污染
+            <TabsTrigger value="mostHumid" className="text-xs">
+              💧
+              湿度
+            </TabsTrigger>
+            <TabsTrigger value="windiest" className="text-xs">
+              💨
+              风速
             </TabsTrigger>
           </TabsList>
           
@@ -247,14 +260,38 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
             </div>
           </TabsContent>
 
-          <TabsContent value="mostPolluted" className="mt-4">
+          <TabsContent value="mostHumid" className="mt-4">
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {rankings?.mostPolluted?.map((item, index) =>
-                renderRankingItem(item, index, 'mostPolluted')
+              {rankings?.mostHumid?.map((item, index) =>
+                renderRankingItem(item, index, 'mostHumid')
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="windiest" className="mt-4">
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {rankings?.windiest?.map((item, index) =>
+                renderRankingItem(item, index, 'windiest')
               )}
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* 性能信息 */}
+        {rankings?.performance && (
+          <div className="mt-4 pt-4 border-t border-white/20">
+            <div className="flex flex-wrap gap-4 text-xs text-white/60">
+              <span>数据源: {rankings.dataSource}</span>
+              <span>城市数量: {rankings.performance.citiesQueried}</span>
+              {rankings.performance.totalTime && (
+                <span>加载时间: {rankings.performance.totalTime}</span>
+              )}
+              {rankings.performance.cacheStatus && (
+                <span>缓存状态: {rankings.performance.cacheStatus === 'cached' ? '缓存' : '实时'}</span>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -7,8 +7,37 @@ import WeatherBackground from "@/components/WeatherBackground";
 import WeatherChart from "@/components/WeatherChart";
 import { formatTemperature, getWeatherEmoji } from "@/lib/utils";
 
+interface WeatherData {
+  name: string;
+  sys?: {
+    country: string;
+    sunrise: number;
+    sunset: number;
+  };
+  coord?: {
+    lat: number;
+    lon: number;
+  };
+  weather?: Array<{
+    main: string;
+    description: string;
+  }>;
+  main?: {
+    temp: number;
+    feels_like: number;
+    temp_min: number;
+    temp_max: number;
+    humidity: number;
+    pressure: number;
+  };
+  wind?: {
+    speed: number;
+  };
+  visibility?: number;
+}
+
 export default function Page() {
-  const [weather, setWeather] = useState<any>(null);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [temperatureUnit, setTemperatureUnit] = useState<'C' | 'F'>('C');
@@ -29,8 +58,8 @@ export default function Page() {
       }
 
       setWeather(data);
-    } catch (err: any) {
-      setError(err.message || "获取天气信息失败");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "获取天气信息失败");
     } finally {
       setLoading(false);
     }
@@ -58,8 +87,8 @@ export default function Page() {
           }
 
           setWeather(data);
-        } catch (err: any) {
-          setError(err.message || "获取当前位置天气失败");
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : "获取当前位置天气失败");
         } finally {
           setLoading(false);
         }

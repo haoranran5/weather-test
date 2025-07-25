@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { CloudRain } from 'lucide-react';
 
 interface HourlyData {
@@ -22,13 +22,7 @@ export default function WeatherChart({ cityName, lat, lon }: WeatherChartProps) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (lat && lon) {
-      fetchHourlyData();
-    }
-  }, [lat, lon]);
-
-  const fetchHourlyData = async () => {
+  const fetchHourlyData = useCallback(async () => {
     if (!lat || !lon) return;
     
     setLoading(true);
@@ -56,7 +50,13 @@ export default function WeatherChart({ cityName, lat, lon }: WeatherChartProps) 
     } finally {
       setLoading(false);
     }
-  };
+  }, [lat, lon]);
+
+  useEffect(() => {
+    if (lat && lon) {
+      fetchHourlyData();
+    }
+  }, [lat, lon, fetchHourlyData]);
 
   const getWeatherIcon = (condition: string) => {
     switch (condition) {

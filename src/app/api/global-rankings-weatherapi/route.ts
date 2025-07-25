@@ -2,6 +2,65 @@ import { NextResponse } from "next/server";
 import { getCityChineseName } from "@/constants/city-translations";
 import { getAirQualityAssessment, getEPAAQILevel, getPM25Level } from "@/utils/aqi-utils";
 
+// WeatherAPI.com 响应类型
+interface WeatherAPIResponse {
+  location: {
+    name: string;
+    region: string;
+    country: string;
+    localtime: string;
+  };
+  current: {
+    temp_c: number;
+    feelslike_c: number;
+    condition: {
+      text: string;
+    };
+    humidity: number;
+    wind_kph: number;
+    pressure_mb: number;
+    vis_km: number;
+    uv: number;
+    air_quality?: {
+      co: number;
+      no2: number;
+      o3: number;
+      so2: number;
+      pm2_5: number;
+      pm10: number;
+      'us-epa-index': number;
+      'gb-defra-index': number;
+    };
+  };
+}
+
+// 处理后的城市数据类型
+interface ProcessedCityData {
+  name: string;
+  englishName: string;
+  region: string;
+  country: string;
+  temperature: number;
+  feelsLike: number;
+  condition: string;
+  humidity: number;
+  windSpeed: number;
+  pressure: number;
+  visibility: number;
+  uv: number;
+  airQuality: {
+    co: number;
+    no2: number;
+    o3: number;
+    so2: number;
+    pm2_5: number;
+    pm10: number;
+    usEpaIndex: number;
+    gbDefraIndex: number;
+  } | null;
+  localtime: string;
+}
+
 // WeatherAPI.com 配置
 const WEATHERAPI_CONFIG = {
   key: process.env.WEATHERAPI_KEY,
@@ -13,7 +72,7 @@ const WEATHERAPI_CONFIG = {
 
 // 缓存配置
 const CACHE_DURATION = 30 * 60 * 1000; // 30分钟缓存
-let cachedData: any = null;
+let cachedData: unknown = null;
 let cacheTimestamp: number = 0;
 
 // 全球主要城市列表
@@ -65,7 +124,7 @@ function checkAndResetCounter() {
 }
 
 // 使用WeatherAPI.com获取城市天气数据
-async function fetchCityWeather(city: string): Promise<any> {
+async function fetchCityWeather(city: string): Promise<WeatherAPIResponse> {
   checkAndResetCounter();
   
   if (WEATHERAPI_CONFIG.counter >= WEATHERAPI_CONFIG.limit) {
@@ -85,7 +144,7 @@ async function fetchCityWeather(city: string): Promise<any> {
 }
 
 // 获取所有城市的天气数据
-async function fetchAllCitiesWeather(): Promise<any[]> {
+async function fetchAllCitiesWeather(): Promise<ProcessedCityData[]> {
   const results = [];
   const batchSize = 5; // 每批处理5个城市，避免过快请求
   
@@ -109,11 +168,13 @@ async function fetchAllCitiesWeather(): Promise<any[]> {
           uv: data.current.uv,
           airQuality: data.current.air_quality ? {
             usEpaIndex: data.current.air_quality["us-epa-index"],
+            gbDefraIndex: data.current.air_quality["gb-defra-index"],
             pm2_5: data.current.air_quality.pm2_5,
             pm10: data.current.air_quality.pm10,
             co: data.current.air_quality.co,
             no2: data.current.air_quality.no2,
-            o3: data.current.air_quality.o3
+            o3: data.current.air_quality.o3,
+            so2: data.current.air_quality.so2
           } : null,
           localtime: data.location.localtime
         };
@@ -136,7 +197,7 @@ async function fetchAllCitiesWeather(): Promise<any[]> {
 }
 
 // 生成排行榜数据
-function generateRankings(cities: any[]) {
+function generateRankings(cities: ProcessedCityData[]) {
   // 最热城市 TOP 10
   const hottest = cities
     .sort((a, b) => b.temperature - a.temperature)
@@ -175,8 +236,8 @@ function generateRankings(cities: any[]) {
   const mostPolluted = cities
     .filter(city => city.airQuality && city.airQuality.usEpaIndex)
     .map(city => {
-      const aqiIndex = city.airQuality.usEpaIndex;
-      const pm25 = city.airQuality.pm2_5;
+      const aqiIndex = city.airQuality!.usEpaIndex;
+      const pm25 = city.airQuality!.pm2_5;
       const airQualityAssessment = getAirQualityAssessment(aqiIndex, pm25);
       const epaLevel = getEPAAQILevel(aqiIndex);
       const pm25Level = getPM25Level(pm25);
@@ -188,7 +249,7 @@ function generateRankings(cities: any[]) {
         region: city.region,
         value: aqiIndex,
         pm2_5: Math.round(pm25 * 10) / 10,
-        pm10: Math.round(city.airQuality.pm10 * 10) / 10,
+        pm10: Math.round(city.airQuality!.pm10 * 10) / 10,
         temperature: Math.round(city.temperature * 10) / 10,
         condition: city.condition,
         localtime: city.localtime,

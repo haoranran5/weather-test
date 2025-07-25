@@ -74,6 +74,8 @@ export interface WeatherInfo {
   country: string;
   countryName: string;
   value: number;
+  humidity?: number;
+  aqi?: number | null;
   extra?: {
     windSpeed?: number;
     pressure?: number;
