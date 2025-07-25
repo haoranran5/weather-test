@@ -12,7 +12,10 @@ interface CityWeather {
     temp: number;
     humidity: number;
     pressure: number;
-    feels_like: number;
+    feels_like: num         .map(city => toWeatherInfo(city, city.main.humidity, { temp: city.main.temp }));.map(city => toWeatherInfo(city, city.main.humidity, {
+        windSpeed: city.wind.speed,
+        temp: undefined
+      }));;
   };
   sys: {
     country: string;
@@ -122,21 +125,50 @@ const CITY_LIST = [
 
 const API_KEY = process.env.OPENWEATHERMAP_API_KEY;
 
-// 添加错误重试机制
+// 添加错误重试机制和详细的错误处理
 async function fetchWithRetry(url: string, retries = 3) {
+  let lastError: Error | null = null;
+  
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url);
-      if (res.ok) return res;
-      if (res.status === 401) throw new Error('Invalid API key');
-      if (i === retries - 1) throw new Error(`Failed after ${retries} retries`);
+      const data = await res.json();
+      
+      // 检查API响应中的具体错误
+      if (data.cod && data.cod !== 200) {
+        const errorMsg = data.message || '未知错误';
+        if (data.cod === 401) {
+          throw new Error(`API认证失败: ${errorMsg}`);
+        }
+        throw new Error(`API错误 (${data.cod}): ${errorMsg}`);
+      }
+      
+      if (!res.ok) {
+        throw new Error(`HTTP错误: ${res.status} ${res.statusText}`);
+      }
+      
+      return data;
     } catch (err) {
-      if (err instanceof Error && err.message === 'Invalid API key') throw err;
-      if (i === retries - 1) throw err;
-      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      lastError = err instanceof Error ? err : new Error(String(err));
+      
+      // 如果是API认证错误，立即返回
+      if (lastError.message.includes('API认证失败')) {
+        throw lastError;
+      }
+      
+      // 最后一次重试失败
+      if (i === retries - 1) {
+        console.error(`请求失败 (重试 ${retries} 次后)：`, url, lastError);
+        throw lastError;
+      }
+      
+      // 等待后重试，使用指数退避策略
+      const delay = Math.min(1000 * Math.pow(2, i), 10000);
+      await new Promise(r => setTimeout(r, delay));
     }
   }
-  throw new Error('Max retries reached');
+  
+  throw lastError || new Error('达到最大重试次数');
 }
 
 // 简单内存缓存，5分钟更新一次
@@ -157,17 +189,35 @@ export async function GET() {
   }
   
   try {
+    // 验证API key格式
+    if (typeof API_KEY !== 'string' || API_KEY.length !== 32) {
+      console.error('Invalid API key format:', API_KEY);
+      return NextResponse.json({
+        error: "API key 格式错误，请确保是32位的有效密钥",
+        hint: "请在 .env.local 文件中正确设置 OPENWEATHERMAP_API_KEY"
+      }, { status: 400 });
+    }
+
     // 先测试API key是否有效 - 使用单个城市测试
     const testUrl = `https://api.openweathermap.org/data/2.5/weather?id=1816670&appid=${API_KEY}&units=metric`;
-    console.log('Testing API key with single city request...');
-    const testRes = await fetch(testUrl);
+    console.log('正在验证 API key...');
     
-    if (!testRes.ok) {
-      console.error('API key test failed:', testRes.status, testRes.statusText);
-      if (testRes.status === 401) {
-        return NextResponse.json({ error: "API key 无效，请检查 OpenWeatherMap API key 是否正确" }, { status: 401 });
+    try {
+      const testData = await fetchWithRetry(testUrl);
+      console.log('API key 验证成功');
+    } catch (error) {
+      console.error('API key 验证失败:', error);
+      if (error instanceof Error && error.message.includes('API认证失败')) {
+        return NextResponse.json({
+          error: "API key 无效，请检查 OpenWeatherMap API key 是否正确",
+          details: error.message,
+          hint: "请确保在 OpenWeatherMap 网站激活了您的 API key，并且有足够的配额"
+        }, { status: 401 });
       }
-      return NextResponse.json({ error: `API 测试失败 (${testRes.status})` }, { status: 500 });
+      return NextResponse.json({
+        error: "API 验证失败",
+        details: error instanceof Error ? error.message : String(error)
+      }, { status: 500 });
     }
     
     console.log('API key test successful, proceeding with batch request...');
@@ -187,10 +237,10 @@ export async function GET() {
     const pollutionPromises = cities.map(async (city: CityWeather): Promise<CityWithAQI> => {
       try {
         const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.coord.lat}&lon=${city.coord.lon}&appid=${API_KEY}`;
-        const res = await fetchWithRetry(url);
-        const air = await res.json();
+        const air = await fetchWithRetry(url);
         return { ...city, aqi: air.list?.[0]?.main?.aqi ?? null };
-      } catch {
+      } catch (error) {
+        console.warn(`无法获取 ${city.name} 的空气质量数据:`, error);
         return { ...city, aqi: null };
       }
     });
@@ -244,6 +294,7 @@ export async function GET() {
       .sort((a, b) => b.wind.speed - a.wind.speed)
       .slice(0, 10)
       .map(city => toWeatherInfo(city, city.wind.speed, {
+        windSpeed: city.wind.speed,
         temp: city.main.temp
       }));
 
@@ -251,6 +302,7 @@ export async function GET() {
       .sort((a, b) => a.main.pressure - b.main.pressure)
       .slice(0, 10)
       .map(city => toWeatherInfo(city, city.main.pressure, {
+        pressure: city.main.pressure,
         temp: city.main.temp
       }));
 
@@ -258,6 +310,7 @@ export async function GET() {
       .sort((a, b) => a.visibility - b.visibility)
       .slice(0, 10)
       .map(city => toWeatherInfo(city, city.visibility, {
+        visibility: city.visibility,
         temp: city.main.temp
       }));
 
