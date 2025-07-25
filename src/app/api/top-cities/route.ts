@@ -12,10 +12,7 @@ interface CityWeather {
     temp: number;
     humidity: number;
     pressure: number;
-    feels_like: num         .map(city => toWeatherInfo(city, city.main.humidity, { temp: city.main.temp }));.map(city => toWeatherInfo(city, city.main.humidity, {
-        windSpeed: city.wind.speed,
-        temp: undefined
-      }));;
+    feels_like: number;
   };
   sys: {
     country: string;
@@ -171,21 +168,182 @@ async function fetchWithRetry(url: string, retries = 3) {
   throw lastError || new Error('达到最大重试次数');
 }
 
-// 简单内存缓存，5分钟更新一次
-let cache: TopCitiesResponse | null = null;
-let cacheTime = 0;
+// 缓存配置
 const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
+const CACHE_STALE_DURATION = 30 * 60 * 1000; // 30分钟过期
+
+interface CacheData {
+  data: TopCitiesResponse;
+  timestamp: number;
+  lastError?: {
+    message: string;
+    time: number;
+  };
+}
+
+let cache: CacheData | null = null;
+
+// 更新缓存的函数
+async function updateCache(): Promise<CacheData> {
+  const fetchStart = Date.now();
+  
+  // 验证API key格式
+  if (typeof API_KEY !== 'string' || API_KEY.length !== 32) {
+    throw new Error('API key 格式错误，请确保是32位的有效密钥');
+  }
+
+  try {
+    // 获取所有数据...
+    const testUrl = `https://api.openweathermap.org/data/2.5/weather?id=1816670&appid=${API_KEY}&units=metric`;
+    const testData = await fetchWithRetry(testUrl);
+    
+    // 获取城市天气数据
+    const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid=${API_KEY}&units=metric&lang=zh_cn`;
+    const data = await fetchWithRetry(groupUrl);
+    
+    if (!data.list || !Array.isArray(data.list)) {
+      throw new Error('API返回数据格式错误');
+    }
+    
+    const cities: CityWeather[] = data.list;
+    
+    // 获取空气质量数据
+    const pollutionList = await Promise.all(
+      cities.map(async (city) => {
+        try {
+          const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.coord.lat}&lon=${city.coord.lon}&appid=${API_KEY}`;
+          const air = await fetchWithRetry(url);
+          return { ...city, aqi: air.list?.[0]?.main?.aqi ?? null };
+        } catch (error) {
+          console.warn(`无法获取 ${city.name} 的空气质量数据:`, error);
+          return { ...city, aqi: null };
+        }
+      })
+    );
+
+    // 处理数据...
+    const result = processWeatherData(cities, pollutionList);
+    
+        // 处理排行榜数据
+    const hottest = [...cities]
+      .sort((a, b) => b.main.temp - a.main.temp)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.main.temp, {
+        feelsLike: city.main.feels_like,
+        windSpeed: city.wind.speed
+      }));
+
+    const coldest = [...cities]
+      .sort((a, b) => a.main.temp - b.main.temp)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.main.temp, {
+        feelsLike: city.main.feels_like,
+        windSpeed: city.wind.speed
+      }));
+
+    const mostHumid = [...cities]
+      .sort((a, b) => b.main.humidity - a.main.humidity)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.main.humidity, {
+        temp: city.main.temp
+      }));
+
+    const windiest = [...cities]
+      .sort((a, b) => b.wind.speed - a.wind.speed)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.wind.speed, {
+        windSpeed: city.wind.speed,
+        temp: city.main.temp
+      }));
+
+    const lowestPressure = [...cities]
+      .sort((a, b) => a.main.pressure - b.main.pressure)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.main.pressure, {
+        pressure: city.main.pressure,
+        temp: city.main.temp
+      }));
+
+    const lowVisibility = [...cities]
+      .sort((a, b) => a.visibility - b.visibility)
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.visibility, {
+        visibility: city.visibility,
+        temp: city.main.temp
+      }));
+
+    const mostPolluted = pollutionList
+      .filter(c => c.aqi !== null)
+      .sort((a, b) => (b.aqi || 0) - (a.aqi || 0))
+      .slice(0, 10)
+      .map(city => toWeatherInfo(city, city.aqi || 0, {
+        temp: city.main.temp
+      }));
+
+    // 组装最终结果
+    const weatherData: TopCitiesResponse = {
+      hottest,
+      coldest,
+      mostHumid,
+      mostPolluted,
+      windiest,
+      lowestPressure,
+      lowVisibility
+    };
+
+    // 更新缓存
+    const newCache: CacheData = {
+      data: weatherData,
+      timestamp: fetchStart
+    };
+    
+    cache = newCache;
+    return newCache;
+  } catch (error) {
+    // 如果更新失败，记录错误并抛出
+    console.error('缓存更新失败:', error);
+    throw error;
+  }
+}
 
 export async function GET() {
   if (!API_KEY) {
     console.error('API_KEY is missing:', API_KEY);
-    return NextResponse.json({ error: "API key 配置错误" }, { status: 500 });
+    return NextResponse.json({ 
+      error: "API key 配置错误",
+      hint: "请确保在环境变量中正确配置了 OPENWEATHERMAP_API_KEY"
+    }, { status: 500 });
   }
   
-  // 检查缓存
   const now = Date.now();
-  if (cache && now - cacheTime < CACHE_DURATION) {
-    return NextResponse.json(cache);
+  
+  // 检查缓存
+  if (cache) {
+    const age = now - cache.timestamp;
+    
+    // 如果缓存新鲜，直接返回
+    if (age < CACHE_DURATION) {
+      return NextResponse.json(cache.data);
+    }
+    
+    // 如果缓存过期但未完全失效，先返回缓存数据，同时在后台更新
+    if (age < CACHE_STALE_DURATION) {
+      // 异步更新缓存
+      updateCache().catch(error => {
+        console.error('后台缓存更新失败:', error);
+        cache!.lastError = {
+          message: error instanceof Error ? error.message : String(error),
+          time: Date.now()
+        };
+      });
+      
+      // 返回稍旧的数据
+      return NextResponse.json({
+        ...cache.data,
+        _cached: true,
+        _cacheAge: Math.round(age / 1000)
+      });
+    }
   }
   
   try {
@@ -224,13 +382,29 @@ export async function GET() {
     
     // 批量获取城市天气
     const groupUrl = `https://api.openweathermap.org/data/2.5/group?id=${CITY_LIST.join(",")}&appid=${API_KEY}&units=metric&lang=zh_cn`;
-    console.log('Making batch request...');
-    const res = await fetch(groupUrl);
-    if (!res.ok) {
-      console.error('Batch weather API error:', res.status, res.statusText);
-      return NextResponse.json({ error: `获取城市天气失败 (${res.status})` }, { status: 500 });
+    console.log('正在获取批量城市天气数据...');
+    
+    let data;
+    try {
+      data = await fetchWithRetry(groupUrl);
+      console.log('成功获取城市天气数据');
+    } catch (error) {
+      console.error('批量获取城市天气失败:', error);
+      return NextResponse.json({
+        error: "获取城市天气失败",
+        details: error instanceof Error ? error.message : String(error),
+        hint: "请检查网络连接和API配额"
+      }, { status: 500 });
     }
-    const data = await res.json();
+    
+    if (!data.list || !Array.isArray(data.list)) {
+      console.error('城市天气数据格式错误:', data);
+      return NextResponse.json({
+        error: "API返回数据格式错误",
+        hint: "请联系技术支持"
+      }, { status: 500 });
+    }
+    
     const cities: CityWeather[] = data.list;
     
     // 获取空气质量数据
@@ -322,7 +496,7 @@ export async function GET() {
         temp: city.main.temp
       }));
 
-    const result: TopCitiesResponse = {
+    const weatherData: TopCitiesResponse = {
       hottest,
       coldest,
       mostHumid,
@@ -331,9 +505,14 @@ export async function GET() {
       lowestPressure,
       lowVisibility
     };
-    cache = result;
-    cacheTime = now;
-    return NextResponse.json(result);
+
+    // 更新缓存
+    cache = {
+      data: weatherData,
+      timestamp: now
+    };
+
+    return NextResponse.json(weatherData);
   } catch (error) {
     console.error('Top cities API error:', error);
     return NextResponse.json({ error: "获取城市排行榜失败" }, { status: 500 });
