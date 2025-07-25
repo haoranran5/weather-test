@@ -206,6 +206,7 @@ export async function GET() {
         pressure?: number;
         visibility?: number;
         feelsLike?: number;
+        temp?: number;
       }
     ): WeatherInfo => ({
       name: city.name,
