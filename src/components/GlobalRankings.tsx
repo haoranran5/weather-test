@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Flame, Snowflake, Factory, RefreshCw, TrendingUp } from 'lucide-react';
+import { Flame, Snowflake, RefreshCw, TrendingUp } from 'lucide-react';
 import { formatTemperature } from '@/lib/utils';
 
 interface CityRankingData {
@@ -35,7 +35,16 @@ interface CityRankingData {
 interface RankingData {
   hottest: CityRankingData[];
   coldest: CityRankingData[];
-  mostPolluted: CityRankingData[];
+  mostHumid: CityRankingData[];
+  windiest: CityRankingData[];
+  performance?: {
+    citiesQueried: number;
+    cacheStatus: string;
+    totalTime?: string;
+    averageTimePerCity?: string;
+    cacheAge?: string;
+  };
+  dataSource?: string;
 }
 
 interface GlobalRankingsProps {
@@ -137,18 +146,10 @@ export default function GlobalRankings({ onCityClick, temperatureUnit }: GlobalR
             <div className="font-medium">{item.name}</div>
             <div className="text-xs text-muted-foreground">
               {item.country}
-              {type === 'mostPolluted' && item.pm2_5 && (
-                <span className="ml-2">PM2.5: {item.pm2_5}μg/m³</span>
-              )}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {type === 'mostPolluted' && (
-            <Badge variant="outline" className={`${item.airQualityBg || 'bg-red-100'} ${item.airQualityColor || 'text-red-700'} border-0`}>
-              {item.airQualityLevel || '差'}
-            </Badge>
-          )}
           <div className={`font-bold ${getValueColor()}`}>
             {formatValue()}
           </div>

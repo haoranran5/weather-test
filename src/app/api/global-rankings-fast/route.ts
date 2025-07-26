@@ -81,7 +81,13 @@ async function fetchCitiesWeatherFast(): Promise<CityWeatherData[]> {
         const result = await apiManager.fetchWeatherData(city);
         
         if (result.success && result.data) {
-          const data = result.data;
+          const data = result.data as {
+            sys?: { country?: string };
+            main?: { temp?: number; feels_like?: number; humidity?: number; pressure?: number };
+            weather?: Array<{ description?: string }>;
+            wind?: { speed?: number };
+            visibility?: number;
+          };
           return {
             name: city,
             chineseName: CITY_CHINESE_NAMES[city] || city,
@@ -209,7 +215,7 @@ export async function GET() {
       return NextResponse.json({
         ...cachedData,
         performance: {
-          ...(cachedData as any).performance,
+          ...(cachedData as { performance: Record<string, unknown> }).performance,
           cacheStatus: "cached",
           cacheAge: Math.round((now - cacheTimestamp) / 1000 / 60) + " minutes"
         }
@@ -235,7 +241,8 @@ export async function GET() {
     const endTime = Date.now();
     const totalTime = endTime - startTime;
     
-    rankings.performance = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (rankings as any).performance = {
       ...rankings.performance,
       totalTime: totalTime + "ms",
       averageTimePerCity: Math.round(totalTime / cities.length) + "ms"

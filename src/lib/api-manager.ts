@@ -13,7 +13,7 @@ interface APIConfig {
 
 interface WeatherAPIResult {
   success: boolean;
-  data?: any;
+  data?: Record<string, unknown>;
   error?: string;
   responseTime: number;
   apiUsed: string;
@@ -197,7 +197,7 @@ class APIManager {
   }
 
   // 调用具体的API
-  private async callAPI(apiName: string, city: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  private async callAPI(apiName: string, city: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
     switch (apiName) {
       case 'WeatherAPI':
         return this.callWeatherAPI(city);
@@ -213,7 +213,7 @@ class APIManager {
   }
 
   // WeatherAPI.com 调用
-  private async callWeatherAPI(city: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  private async callWeatherAPI(city: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
     const apiKey = process.env.WEATHERAPI_KEY;
     if (!apiKey) {
       return { success: false, error: 'WeatherAPI密钥未配置' };
@@ -238,7 +238,7 @@ class APIManager {
   }
 
   // OpenWeatherMap 调用
-  private async callOpenWeatherMap(city: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  private async callOpenWeatherMap(city: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
     const apiKey = process.env.OPENWEATHERMAP_API_KEY;
     if (!apiKey) {
       return { success: false, error: 'OpenWeatherMap密钥未配置' };
@@ -263,7 +263,7 @@ class APIManager {
   }
 
   // Visual Crossing 调用
-  private async callVisualCrossing(city: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  private async callVisualCrossing(city: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
     const apiKey = process.env.VISUAL_CROSSING_API_KEY;
     if (!apiKey) {
       return { success: false, error: 'Visual Crossing密钥未配置' };
@@ -288,7 +288,7 @@ class APIManager {
   }
 
   // Tomorrow.io 调用
-  private async callTomorrowAPI(city: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  private async callTomorrowAPI(city: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
     const apiKey = process.env.TOMORROW_API_KEY;
     if (!apiKey) {
       return { success: false, error: 'Tomorrow.io密钥未配置' };
@@ -313,7 +313,8 @@ class APIManager {
   }
 
   // 数据标准化方法
-  private normalizeWeatherAPIData(data: any): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private normalizeWeatherAPIData(data: Record<string, any>): Record<string, unknown> {
     return {
       coord: { lat: data.location.lat, lon: data.location.lon },
       weather: [{
@@ -340,14 +341,16 @@ class APIManager {
     };
   }
 
-  private normalizeOpenWeatherData(data: any): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private normalizeOpenWeatherData(data: Record<string, any>): Record<string, unknown> {
     return {
       ...data,
       source: 'OpenWeatherMap'
     };
   }
 
-  private normalizeVisualCrossingData(data: any): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private normalizeVisualCrossingData(data: Record<string, any>): Record<string, unknown> {
     const current = data.currentConditions;
     return {
       coord: { lat: data.latitude, lon: data.longitude },
@@ -375,7 +378,8 @@ class APIManager {
     };
   }
 
-  private normalizeTomorrowData(data: any): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private normalizeTomorrowData(data: Record<string, any>): Record<string, unknown> {
     const current = data.data.values;
     return {
       coord: { lat: data.location.lat, lon: data.location.lon },

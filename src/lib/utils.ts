@@ -147,7 +147,7 @@ export class DataCache {
     if (!item) {
       const stored = storage.get(`cache_${key}`);
       if (stored) {
-        item = stored;
+        item = stored as CacheItem<unknown>;
         this.cache.set(key, item);
       }
     }
