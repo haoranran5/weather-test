@@ -17,12 +17,7 @@ interface WeatherChartProps {
   lon?: number;
 }
 
-interface ForecastResponse {
-  hourly: HourlyData[];
-  dataSource: string;
-  lastUpdated: string;
-  cacheStatus: string;
-}
+
 
 export default function WeatherChart({ cityName, lat, lon }: WeatherChartProps) {
   const [hourlyData, setHourlyData] = useState<HourlyData[]>([]);
@@ -64,6 +59,7 @@ export default function WeatherChart({ cityName, lat, lon }: WeatherChartProps) 
       }
 
       // 转换API数据格式
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const formattedData: HourlyData[] = data.hourly.map((item: any) => ({
         time: item.time,
         temperature: item.temperature,

@@ -174,6 +174,7 @@ async function fetchOpenWeatherMapForecast(query: string): Promise<HourlyForecas
       throw new Error("OpenWeatherMap返回数据格式错误");
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const hourlyData: HourlyForecast[] = data.list.slice(0, 8).map((item: any) => ({
       time: item.dt * 1000,
       temperature: item.main.temp,
