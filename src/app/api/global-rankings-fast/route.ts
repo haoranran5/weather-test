@@ -6,42 +6,7 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30分钟缓存（减少缓存时间以
 let cachedData: unknown = null;
 let cacheTimestamp: number = 0;
 
-// 权威极端气候城市数据库 - 基于世界气象组织(WMO)和NASA数据
-const AUTHORITATIVE_CLIMATE_CITIES = {
-  // 极热地区 - 历史记录最高温度地区
-  EXTREME_HOT: [
-    "Phoenix,US",          // 凤凰城 - 夏季平均45°C+
-    "Dubai,AE",           // 迪拜 - 沙漠气候，夏季40°C+
-    "Riyadh,SA",          // 利雅得 - 沙漠气候
-    "Kuwait City,KW",      // 科威特城 - 记录54°C
-    "Las Vegas,US",        // 拉斯维加斯 - 沙漠气候
-    "Cairo,EG",           // 开罗 - 沙漠边缘
-    "Bangkok,TH",         // 曼谷 - 热带季风
-    "Singapore,SG",       // 新加坡 - 赤道气候
-  ],
 
-  // 极冷地区 - 历史记录最低温度地区
-  EXTREME_COLD: [
-    "Fairbanks,US",       // 费尔班克斯 - 冬季-40°C
-    "Yellowknife,CA",     // 黄刀镇 - 极地气候
-    "Reykjavik,IS",       // 雷克雅未克 - 北极圈附近
-    "Anchorage,US",       // 安克雷奇 - 阿拉斯加
-    "Murmansk,RU",        // 摩尔曼斯克 - 北极圈内
-    "Helsinki,FI",        // 赫尔辛基 - 北欧
-    "Oslo,NO",            // 奥斯陆 - 北欧
-    "Stockholm,SE",       // 斯德哥尔摩 - 北欧
-  ],
-
-  // 温带参考城市 - 全球主要城市
-  TEMPERATE_REFERENCE: [
-    "London,GB",          // 伦敦 - 温带海洋性
-    "Paris,FR",           // 巴黎 - 温带大陆性
-    "New York,US",        // 纽约 - 温带大陆性
-    "Tokyo,JP",           // 东京 - 温带季风
-    "Sydney,AU",          // 悉尼 - 南半球温带
-    "Beijing,CN",         // 北京 - 温带季风
-  ]
-};
 
 // 权威城市中文名映射
 const AUTHORITATIVE_CITY_NAMES: Record<string, string> = {

@@ -41,8 +41,11 @@ interface RankingData {
     totalTime?: string;
     averageTimePerCity?: string;
     cacheAge?: string;
+    dataAccuracy?: string;
+    verificationStatus?: string;
   };
   dataSource?: string;
+  dataQuality?: string;
 }
 
 interface GlobalRankingsProps {
