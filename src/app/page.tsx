@@ -1,10 +1,11 @@
 "use client";
 import { useState } from "react";
 import EnhancedWeatherSearch from "@/components/EnhancedWeatherSearch";
-import GlobalRankings from "@/components/GlobalRankings";
+
 import ThemeToggle from "@/components/ThemeToggle";
 import WeatherBackground from "@/components/WeatherBackground";
-import WeatherChart from "@/components/WeatherChart";
+import HourlyForecast from "@/components/HourlyForecast";
+import ChinaCitiesRanking from "@/components/ChinaCitiesRanking";
 import { formatTemperature, getWeatherEmoji } from "@/lib/utils";
 
 interface WeatherData {
@@ -276,9 +277,9 @@ export default function Page() {
             </div>
           )}
 
-          {/* 24小时天气趋势 */}
+          {/* 24小时天气预报 */}
           {weather && (
-            <WeatherChart
+            <HourlyForecast
               cityName={weather.name}
               lat={weather.coord?.lat}
               lon={weather.coord?.lon}
@@ -286,12 +287,9 @@ export default function Page() {
           )}
           </div>
 
-          {/* 右侧：全球排行榜 */}
+          {/* 右侧：中国城市排行榜 */}
           <div className="lg:col-span-1">
-            <GlobalRankings
-              onCityClick={handleSearch}
-              temperatureUnit={temperatureUnit}
-            />
+            <ChinaCitiesRanking />
           </div>
         </div>
 
@@ -351,15 +349,15 @@ export default function Page() {
               </div>
             </div>
 
-            {/* 全球排行榜 */}
+            {/* 中国城市排行榜 */}
             <div className="group relative bg-white/15 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
               <div className="absolute inset-0 bg-gradient-to-br from-red-400/20 to-rose-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <div className="relative z-10">
                 <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center mb-4">
-                  <span className="text-2xl">🔥</span>
+                  <span className="text-2xl">🇨🇳</span>
                 </div>
-                <h3 className="font-bold text-white text-lg mb-3">全球排行榜</h3>
-                <p className="text-white/80 text-sm leading-relaxed">最热、最冷、污染最严重城市TOP10数据</p>
+                <h3 className="font-bold text-white text-lg mb-3">中国城市排行榜</h3>
+                <p className="text-white/80 text-sm leading-relaxed">覆盖全国200+城市，包含所有省会城市和重要地级市的实时温度排行</p>
               </div>
             </div>
 

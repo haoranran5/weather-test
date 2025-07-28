@@ -54,47 +54,65 @@ interface CityWeatherData {
   apiSource: string;
 }
 
-// 权威城市选择算法 - 确保数据准确性和权威性
-function selectAuthoritativeCities(): string[] {
+// 全球主要城市选择算法 - 包含更多代表性城市
+function selectGlobalCities(): string[] {
   const selectedCities: string[] = [];
 
-  // 极热城市 (5个) - 选择API成功率最高的
+  // 极热城市 (8个) - 全球最热的地区
   const hotCities = [
-    "Phoenix,US",      // 美国，API稳定
-    "Dubai,AE",        // 阿联酋，API稳定
-    "Las Vegas,US",    // 美国，API稳定
-    "Bangkok,TH",      // 泰国，API稳定
-    "Singapore,SG"     // 新加坡，API稳定
+    "Phoenix,US",      // 美国凤凰城
+    "Dubai,AE",        // 阿联酋迪拜
+    "Las Vegas,US",    // 美国拉斯维加斯
+    "Bangkok,TH",      // 泰国曼谷
+    "Singapore,SG",    // 新加坡
+    "Delhi,IN",        // 印度德里
+    "Cairo,EG",        // 埃及开罗
+    "Riyadh,SA"        // 沙特阿拉伯利雅得
   ];
   selectedCities.push(...hotCities);
 
-  // 极冷城市 (5个) - 选择API成功率最高的
+  // 中国主要城市 (6个) - 包含成都等重要城市
+  const chinaCities = [
+    "Beijing,CN",      // 北京
+    "Shanghai,CN",     // 上海
+    "Chengdu,CN",      // 成都
+    "Guangzhou,CN",    // 广州
+    "Shenzhen,CN",     // 深圳
+    "Chongqing,CN"     // 重庆
+  ];
+  selectedCities.push(...chinaCities);
+
+  // 极冷城市 (6个) - 全球最冷的地区
   const coldCities = [
-    "Reykjavik,IS",    // 冰岛，API稳定
-    "Helsinki,FI",     // 芬兰，API稳定
-    "Oslo,NO",         // 挪威，API稳定
-    "Stockholm,SE",    // 瑞典，API稳定
-    "Anchorage,US"     // 美国，API稳定
+    "Reykjavik,IS",    // 冰岛雷克雅未克
+    "Helsinki,FI",     // 芬兰赫尔辛基
+    "Oslo,NO",         // 挪威奥斯陆
+    "Stockholm,SE",    // 瑞典斯德哥尔摩
+    "Anchorage,US",    // 美国安克雷奇
+    "Moscow,RU"        // 俄罗斯莫斯科
   ];
   selectedCities.push(...coldCities);
 
-  // 温带参考城市 (5个) - 全球主要城市
-  const temperateCities = [
-    "London,GB",       // 英国，API稳定
-    "Paris,FR",        // 法国，API稳定
-    "New York,US",     // 美国，API稳定
-    "Tokyo,JP",        // 日本，API稳定
-    "Sydney,AU"        // 澳大利亚，API稳定
+  // 其他重要城市 (8个) - 全球主要城市
+  const majorCities = [
+    "London,GB",       // 英国伦敦
+    "Paris,FR",        // 法国巴黎
+    "New York,US",     // 美国纽约
+    "Tokyo,JP",        // 日本东京
+    "Sydney,AU",       // 澳大利亚悉尼
+    "São Paulo,BR",    // 巴西圣保罗
+    "Mexico City,MX",  // 墨西哥墨西哥城
+    "Istanbul,TR"      // 土耳其伊斯坦布尔
   ];
-  selectedCities.push(...temperateCities);
+  selectedCities.push(...majorCities);
 
-  return selectedCities; // 总共15个城市，确保高成功率
+  return selectedCities; // 总共28个城市，覆盖全球主要地区
 }
 
-// 权威天气数据获取 - 确保高成功率和准确性
-async function fetchAuthoritativeWeatherData(): Promise<CityWeatherData[]> {
-  const selectedCities = selectAuthoritativeCities();
-  console.log(`🌍 开始获取 ${selectedCities.length} 个权威气候城市的天气数据`);
+// 全球天气数据获取 - 覆盖更多城市
+async function fetchGlobalWeatherData(): Promise<CityWeatherData[]> {
+  const selectedCities = selectGlobalCities();
+  console.log(`🌍 开始获取 ${selectedCities.length} 个全球主要城市的天气数据`);
 
   const startTime = Date.now();
   const results: CityWeatherData[] = [];
@@ -256,10 +274,10 @@ export async function GET() {
     console.log("🔄 开始获取权威全球排行榜数据");
     const startTime = Date.now();
 
-    // 获取权威城市天气数据
-    const cities = await fetchAuthoritativeWeatherData();
+    // 获取全球城市天气数据
+    const cities = await fetchGlobalWeatherData();
 
-    if (cities.length < 10) { // 至少需要10个城市才能生成可靠排行榜
+    if (cities.length < 15) { // 至少需要15个城市才能生成可靠排行榜
       console.warn(`⚠️ 只获取到 ${cities.length} 个城市数据，数据不足`);
       return NextResponse.json(
         {
