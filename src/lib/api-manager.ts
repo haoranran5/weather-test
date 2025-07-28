@@ -29,49 +29,64 @@ class APIManager {
   }
 
   private initializeAPIs() {
-    // 按响应速度和可靠性排序
-    const apiConfigs: APIConfig[] = [
-      {
+    // 按响应速度和可靠性排序，只启用有密钥的API
+    const apiConfigs: APIConfig[] = [];
+
+    // WeatherAPI - 优先级最高
+    if (process.env.WEATHERAPI_KEY) {
+      apiConfigs.push({
         name: 'WeatherAPI',
         priority: 1,
-        avgResponseTime: 800,
+        avgResponseTime: 1200,
         successRate: 0.95,
         isAvailable: true,
         dailyLimit: 10000,
         dailyUsed: 0,
         resetTime: this.getNextResetTime()
-      },
-      {
+      });
+    }
+
+    // OpenWeatherMap - 备用选择
+    if (process.env.OPENWEATHERMAP_API_KEY) {
+      apiConfigs.push({
         name: 'OpenWeatherMap',
         priority: 2,
-        avgResponseTime: 1200,
+        avgResponseTime: 1500,
         successRate: 0.90,
         isAvailable: true,
         dailyLimit: 1000,
         dailyUsed: 0,
         resetTime: this.getNextResetTime()
-      },
-      {
+      });
+    }
+
+    // Visual Crossing - 可选
+    if (process.env.VISUAL_CROSSING_API_KEY) {
+      apiConfigs.push({
         name: 'VisualCrossing',
         priority: 3,
-        avgResponseTime: 1500,
+        avgResponseTime: 2000,
         successRate: 0.85,
         isAvailable: true,
         dailyLimit: 1000,
         dailyUsed: 0,
         resetTime: this.getNextResetTime()
-      },
-      {
+      });
+    }
+
+    // Tomorrow.io - 可选
+    if (process.env.TOMORROW_API_KEY) {
+      apiConfigs.push({
         name: 'Tomorrow',
         priority: 4,
-        avgResponseTime: 2000,
+        avgResponseTime: 2500,
         successRate: 0.80,
         isAvailable: true,
         dailyLimit: 500,
         dailyUsed: 0,
         resetTime: this.getNextResetTime()
-      }
-    ];
+      });
+    }
 
     apiConfigs.forEach(config => {
       this.apis.set(config.name, config);
@@ -219,22 +234,46 @@ class APIManager {
       return { success: false, error: 'WeatherAPI密钥未配置' };
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 减少超时时间
 
-    const response = await fetch(
-      `https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${encodeURIComponent(city)}&aqi=yes&lang=zh`,
-      { signal: controller.signal }
-    );
+      const response = await fetch(
+        `https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${encodeURIComponent(city)}&aqi=yes&lang=zh`,
+        {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'WeatherApp/1.0'
+          }
+        }
+      );
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      return { success: false, error: `WeatherAPI HTTP ${response.status}` };
+      if (!response.ok) {
+        if (response.status === 400) {
+          return { success: false, error: `城市未找到: ${city}` };
+        }
+        return { success: false, error: `WeatherAPI HTTP ${response.status}` };
+      }
+
+      const data = await response.json();
+
+      // 验证数据完整性
+      if (!data.current || !data.location) {
+        return { success: false, error: 'WeatherAPI返回数据不完整' };
+      }
+
+      return { success: true, data: this.normalizeWeatherAPIData(data) };
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return { success: false, error: 'WeatherAPI请求超时' };
+        }
+        return { success: false, error: `WeatherAPI错误: ${error.message}` };
+      }
+      return { success: false, error: 'WeatherAPI未知错误' };
     }
-
-    const data = await response.json();
-    return { success: true, data: this.normalizeWeatherAPIData(data) };
   }
 
   // OpenWeatherMap 调用
@@ -244,22 +283,46 @@ class APIManager {
       return { success: false, error: 'OpenWeatherMap密钥未配置' };
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const response = await fetch(
-      `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKey}&units=metric&lang=zh_cn`,
-      { signal: controller.signal }
-    );
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKey}&units=metric&lang=zh_cn`,
+        {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'WeatherApp/1.0'
+          }
+        }
+      );
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      return { success: false, error: `OpenWeatherMap HTTP ${response.status}` };
+      if (!response.ok) {
+        if (response.status === 404) {
+          return { success: false, error: `城市未找到: ${city}` };
+        }
+        return { success: false, error: `OpenWeatherMap HTTP ${response.status}` };
+      }
+
+      const data = await response.json();
+
+      // 验证数据完整性
+      if (!data.main || !data.name) {
+        return { success: false, error: 'OpenWeatherMap返回数据不完整' };
+      }
+
+      return { success: true, data: this.normalizeOpenWeatherData(data) };
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return { success: false, error: 'OpenWeatherMap请求超时' };
+        }
+        return { success: false, error: `OpenWeatherMap错误: ${error.message}` };
+      }
+      return { success: false, error: 'OpenWeatherMap未知错误' };
     }
-
-    const data = await response.json();
-    return { success: true, data: this.normalizeOpenWeatherData(data) };
   }
 
   // Visual Crossing 调用
