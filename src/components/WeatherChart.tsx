@@ -32,30 +32,41 @@ export default function WeatherChart({ cityName, lat, lon }: WeatherChartProps) 
     setError(null);
 
     try {
-      // 构建API请求URL
-      let apiUrl = '/api/forecast?';
+      // 构建API请求URL - 优先使用测试API进行诊断
+      let apiUrl = '/api/forecast-test?';
       if (cityName) {
         apiUrl += `city=${encodeURIComponent(cityName)}`;
       } else {
-        apiUrl += `lat=${lat}&lon=${lon}`;
+        apiUrl += `city=Beijing`; // 默认城市
       }
 
       console.log(`🌤️ 获取24小时预报: ${apiUrl}`);
 
-      const response = await fetch(apiUrl);
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
       if (!response.ok) {
-        throw new Error(`API请求失败: ${response.status}`);
+        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
 
-      if (data.error) {
-        throw new Error(data.error);
+      console.log('📊 API响应数据:', data);
+
+      if (!data.success) {
+        throw new Error(data.error || 'API返回失败状态');
       }
 
       if (!data.hourly || !Array.isArray(data.hourly)) {
-        throw new Error('API返回数据格式错误');
+        throw new Error(`API返回数据格式错误: ${JSON.stringify(data)}`);
+      }
+
+      if (data.hourly.length === 0) {
+        throw new Error('API返回空数据');
       }
 
       // 转换API数据格式
@@ -72,10 +83,33 @@ export default function WeatherChart({ cityName, lat, lon }: WeatherChartProps) 
       setDataSource(data.dataSource || '未知');
       console.log(`✅ 成功获取 ${formattedData.length} 小时预报数据，数据源: ${data.dataSource}`);
 
+      // 如果使用的是模拟数据，显示警告
+      if (data.dataSource === '模拟数据') {
+        setError('⚠️ 当前显示模拟数据，API可能配置有问题');
+      }
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '获取天气趋势数据失败';
-      setError(errorMessage);
+      setError(`获取失败: ${errorMessage}`);
       console.error('获取24小时预报失败:', err);
+
+      // 生成本地模拟数据作为降级方案
+      const fallbackData: HourlyData[] = Array.from({ length: 24 }, (_, i) => {
+        const baseTemp = 20 + Math.sin((i - 6) * Math.PI / 12) * 8;
+        const variation = (Math.random() - 0.5) * 4;
+
+        return {
+          time: Date.now() + i * 3600000,
+          temperature: Math.round((baseTemp + variation) * 10) / 10,
+          condition: ['晴朗', '多云', '小雨', '阴天'][Math.floor(Math.random() * 4)],
+          precipitationProbability: Math.random() * 100,
+          windSpeed: Math.random() * 10 + 2,
+        };
+      });
+
+      setHourlyData(fallbackData);
+      setDataSource('本地模拟');
+
     } finally {
       setLoading(false);
     }
