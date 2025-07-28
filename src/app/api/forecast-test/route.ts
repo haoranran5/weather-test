@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
           console.log(`✅ OpenWeatherMap响应成功`);
           
           if (data.list && Array.isArray(data.list)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             hourlyData = data.list.slice(0, 8).map((item: any) => ({
               time: item.dt * 1000,
               temperature: item.main.temp,

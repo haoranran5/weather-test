@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
       } else {
         console.log(`⚠️ OpenWeatherMap也失败，生成智能预测`);
         // 如果所有API都失败，生成基于当前天气的智能预测
-        const intelligentForecast = await generateIntelligentForecast(query);
+        const intelligentForecast = await generateIntelligentForecast();
         hourlyData = intelligentForecast;
         dataSource = "智能预测";
         console.log(`✅ 智能预测生成 ${hourlyData.length} 小时数据`);
@@ -208,14 +208,14 @@ async function fetchOpenWeatherMapForecast(query: string): Promise<HourlyForecas
 }
 
 // 生成基于当前天气的智能预测
-async function generateIntelligentForecast(query: string): Promise<HourlyForecast[]> {
+async function generateIntelligentForecast(): Promise<HourlyForecast[]> {
   console.log("🧠 生成智能天气预测");
 
   try {
     // 使用相对URL而不是绝对URL，适配生产环境
-    let baseTemp = 20;
-    let baseCondition = "多云";
-    let baseHumidity = 60;
+    const baseTemp = 20;
+    const baseCondition = "多云";
+    const baseHumidity = 60;
 
     // 在生产环境中，我们使用默认值而不是调用其他API
     // 这避免了循环依赖和网络问题
