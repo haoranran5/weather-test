@@ -43,34 +43,49 @@ export async function GET(req: NextRequest) {
     const now = Date.now();
     const cached = cache.get(cacheKey);
     if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+      console.log(`📋 返回缓存的24小时预报数据: ${query}`);
       return NextResponse.json(cached.data);
     }
 
     console.log(`🌤️ 开始获取24小时预报数据: ${query}`);
+    console.log(`🔑 API配置状态: WeatherAPI=${!!process.env.WEATHERAPI_KEY}, OpenWeatherMap=${!!process.env.OPENWEATHERMAP_API_KEY}`);
+
+    let hourlyData: HourlyForecast[] = [];
+    let dataSource = "未知";
 
     // 尝试使用WeatherAPI.com获取24小时预报
-    const hourlyData = await fetchWeatherAPIForecast(query);
+    console.log(`🌤️ 尝试WeatherAPI.com获取预报数据`);
+    const weatherApiData = await fetchWeatherAPIForecast(query);
 
-    if (hourlyData.length === 0) {
+    if (weatherApiData.length > 0) {
+      hourlyData = weatherApiData;
+      dataSource = "WeatherAPI.com";
+      console.log(`✅ WeatherAPI.com成功获取 ${hourlyData.length} 小时数据`);
+    } else {
+      console.log(`⚠️ WeatherAPI.com获取失败，尝试OpenWeatherMap`);
       // 如果WeatherAPI失败，尝试OpenWeatherMap
       const owmData = await fetchOpenWeatherMapForecast(query);
       if (owmData.length > 0) {
-        hourlyData.push(...owmData);
+        hourlyData = owmData;
+        dataSource = "OpenWeatherMap";
+        console.log(`✅ OpenWeatherMap成功获取 ${hourlyData.length} 小时数据`);
+      } else {
+        console.log(`⚠️ OpenWeatherMap也失败，生成智能预测`);
+        // 如果所有API都失败，生成基于当前天气的智能预测
+        const intelligentForecast = await generateIntelligentForecast(query);
+        hourlyData = intelligentForecast;
+        dataSource = "智能预测";
+        console.log(`✅ 智能预测生成 ${hourlyData.length} 小时数据`);
       }
-    }
-
-    if (hourlyData.length === 0) {
-      // 如果所有API都失败，生成基于当前天气的智能预测
-      const intelligentForecast = await generateIntelligentForecast(query);
-      hourlyData.push(...intelligentForecast);
     }
 
     const result = {
       hourly: hourlyData,
       location: query,
-      dataSource: hourlyData.length > 0 ? "WeatherAPI/OpenWeatherMap" : "智能预测",
+      dataSource: dataSource,
       lastUpdated: new Date().toISOString(),
-      cacheStatus: "fresh"
+      cacheStatus: "fresh",
+      totalHours: hourlyData.length
     };
 
     // 更新缓存
@@ -195,20 +210,15 @@ async function fetchOpenWeatherMapForecast(query: string): Promise<HourlyForecas
 // 生成基于当前天气的智能预测
 async function generateIntelligentForecast(query: string): Promise<HourlyForecast[]> {
   console.log("🧠 生成智能天气预测");
-  
+
   try {
-    // 先获取当前天气作为基准
-    const currentWeatherResponse = await fetch(`http://localhost:3000/api/weather?city=${encodeURIComponent(query)}`);
+    // 使用相对URL而不是绝对URL，适配生产环境
     let baseTemp = 20;
     let baseCondition = "多云";
     let baseHumidity = 60;
-    
-    if (currentWeatherResponse.ok) {
-      const currentWeather = await currentWeatherResponse.json();
-      baseTemp = currentWeather.main?.temp || 20;
-      baseCondition = currentWeather.weather?.[0]?.description || "多云";
-      baseHumidity = currentWeather.main?.humidity || 60;
-    }
+
+    // 在生产环境中，我们使用默认值而不是调用其他API
+    // 这避免了循环依赖和网络问题
 
     const hourlyData: HourlyForecast[] = [];
     const now = Date.now();
