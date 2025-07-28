@@ -17,46 +17,79 @@ interface WeatherChartProps {
   lon?: number;
 }
 
+interface ForecastResponse {
+  hourly: HourlyData[];
+  dataSource: string;
+  lastUpdated: string;
+  cacheStatus: string;
+}
+
 export default function WeatherChart({ cityName, lat, lon }: WeatherChartProps) {
   const [hourlyData, setHourlyData] = useState<HourlyData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<string>('');
 
   const fetchHourlyData = useCallback(async () => {
-    if (!lat || !lon) return;
-    
+    if (!cityName && (!lat || !lon)) return;
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      // 模拟24小时数据
-      const mockData: HourlyData[] = Array.from({ length: 24 }, (_, i) => {
-        const baseTemp = 20 + Math.sin((i - 6) * Math.PI / 12) * 8;
-        const variation = (Math.random() - 0.5) * 4;
-        
-        return {
-          time: Date.now() + i * 3600000,
-          temperature: baseTemp + variation,
-          condition: ['晴朗', '多云', '小雨', '阴天'][Math.floor(Math.random() * 4)],
-          precipitationProbability: Math.random() * 100,
-          windSpeed: Math.random() * 10 + 2,
-        };
-      });
-      
-      setHourlyData(mockData);
+      // 构建API请求URL
+      let apiUrl = '/api/forecast?';
+      if (cityName) {
+        apiUrl += `city=${encodeURIComponent(cityName)}`;
+      } else {
+        apiUrl += `lat=${lat}&lon=${lon}`;
+      }
+
+      console.log(`🌤️ 获取24小时预报: ${apiUrl}`);
+
+      const response = await fetch(apiUrl);
+
+      if (!response.ok) {
+        throw new Error(`API请求失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (!data.hourly || !Array.isArray(data.hourly)) {
+        throw new Error('API返回数据格式错误');
+      }
+
+      // 转换API数据格式
+      const formattedData: HourlyData[] = data.hourly.map((item: any) => ({
+        time: item.time,
+        temperature: item.temperature,
+        condition: item.condition,
+        precipitationProbability: item.precipitationProbability,
+        windSpeed: item.windSpeed
+      }));
+
+      setHourlyData(formattedData);
+      setDataSource(data.dataSource || '未知');
+      console.log(`✅ 成功获取 ${formattedData.length} 小时预报数据，数据源: ${data.dataSource}`);
+
     } catch (err) {
-      setError('获取天气趋势数据失败');
-      console.error('Error fetching hourly data:', err);
+      const errorMessage = err instanceof Error ? err.message : '获取天气趋势数据失败';
+      setError(errorMessage);
+      console.error('获取24小时预报失败:', err);
     } finally {
       setLoading(false);
     }
-  }, [lat, lon]);
+  }, [cityName, lat, lon]);
 
   useEffect(() => {
-    if (lat && lon) {
+    if (cityName || (lat && lon)) {
       fetchHourlyData();
     }
-  }, [lat, lon, fetchHourlyData]);
+  }, [cityName, lat, lon, fetchHourlyData]);
 
   const getWeatherIcon = (condition: string) => {
     switch (condition) {
@@ -123,6 +156,11 @@ export default function WeatherChart({ cityName, lat, lon }: WeatherChartProps) 
             </span>
           )}
         </h3>
+        {dataSource && (
+          <div className="text-xs text-white/60 mb-2">
+            数据源: {dataSource} • 实时更新
+          </div>
+        )}
       </div>
       
       <div>
